@@ -8,7 +8,9 @@ export default {
   name: 'chrome',
   applies: (t) => t.host === 'chrome',
   apply({ window, mask }) {
-    const chrome = { runtime: {} };
+    // adopt:顶端从 Node 异源 Object.prototype 重定向到 window.Object.prototype
+    // (否则检测器 getPrototypeOf(chrome) === Object.prototype 为 false,一行即破,yvq.14)。
+    const chrome = mask.adopt({ runtime: {} });
     mask.tag(chrome.runtime, 'Object');
     window.chrome = chrome;
   },

@@ -13,5 +13,6 @@ import canvas from './canvas.js';
 import webgl from './webgl.js';
 import audio from './audio.js';
 import clock from './clock.js';
+import protochain from './protochain.js';
 
-export const patches = [windowPatch, stack, symbol, navigator, screen, chrome, touch, canvas, webgl, audio, clock];
+export const patches = [windowPatch, stack, symbol, navigator, screen, chrome, touch, canvas, webgl, audio, clock, protochain];
