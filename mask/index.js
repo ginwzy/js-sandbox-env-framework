@@ -4,6 +4,8 @@
  *
  * 对照 sdenv-extend:
  *   fn    ← setFuncNative
+ *   wrap  ← setFuncNative(对已存在具名方法,仅改外观)
+ *   hook  ← wrapFunc(tools/setFunc:拦截原方法 + 改行为)
  *   tag   ← setObjName / setObjNative
  *   iface ← getNativeProto
  *   boot  ← _setFuncInit
@@ -89,6 +91,34 @@ export function createMask(window) {
     return func;
   }
 
+  /**
+   * 行为型包裹:用"拦截原方法 + 自定义实现"替换对象上的现有方法,并 native 化外观(对照 sdenv tools/setFunc 的 wrapFunc)。
+   *
+   * 与 fn / wrap 的分工:
+   *   fn   —— native 化"显式传入的新函数对象"(新建/构造器壳),只改外观。
+   *   wrap —— native 化"对象上已存在的具名方法",只改外观、不改行为(消除 toString 源码泄漏)。
+   *   hook —— 替换"对象上已存在的方法"为新行为:factory(orig) 返回新实现(闭包持有 orig),
+   *           新实现继承 orig 的 arity(length)与属性名,并经 fn native 化(masked/toString/reparent)。
+   *           用于"过滤/记录/回放"类拦截(如对 getOwnPropertySymbols 过滤内部 symbol、getParameter 回放采集值)。
+   *
+   * length 取自原方法(而非 factory 写的形参个数),避免 arity 泄漏;描述符 flags(writable/enumerable/configurable)
+   * 沿用原属性,仅替换 value —— 静态方法多为 writable+configurable,普通赋值也可,但 defineProperty 保 flags 更稳。
+   * @returns {Function|undefined}  新实现;target[name] 非函数时 undefined。
+   */
+  function hook(target, name, factory) {
+    const orig = target == null ? undefined : target[name];
+    if (typeof orig !== 'function') return undefined;
+    const impl = factory(orig);
+    if (typeof impl !== 'function') return undefined;
+    fn(impl, name, orig.length);                                  // name←属性名、length←原 arity、masked、own toString、reparent
+    if (Object.getPrototypeOf(impl) === WFunctionProto) {
+      delete impl.toString;                                       // reparent 落地 → 删 own toString,回落原型链 nativeToString
+    }
+    const od = Object.getOwnPropertyDescriptor(target, name);
+    Object.defineProperty(target, name, od ? { ...od, value: impl } : { value: impl, writable: true, configurable: true });
+    return impl;
+  }
+
   /** 对象类型标签:Object.prototype.toString.call(obj) → [object Name]。 */
   function tag(obj, name) {
     Object.defineProperty(obj, Symbol.toStringTag, {
@@ -141,5 +171,5 @@ export function createMask(window) {
     }
   }
 
-  return { fn, wrap, tag, iface, mixin, adopt, boot };
+  return { fn, wrap, hook, tag, iface, mixin, adopt, boot };
 }
