@@ -63,6 +63,32 @@ export function createMask(window) {
     return func;
   }
 
+  /**
+   * 把"对象上按名已存在的方法/构造器"原地 native 化(对照 sdenv setFuncNative,但用 WeakSet 标记免同名误伤)。
+   * 消除 jsdom 内置函数 toString 暴露实现源码的泄漏:window.atob.toString() → 'function atob() { [native code] }'。
+   *
+   * 与 fn 的分工:fn 接管"显式传入的函数对象"(新建/构造器壳);
+   * wrap 接管"对象上的具名函数",自动以属性名校正 name(jsdom 的 atob 等 name 为空),并删除 own toString。
+   * 真 native 化的方法**没有 own toString**(从 Function.prototype 继承),故 reparent 落地后删掉 fn 留下的 own toString,
+   * 回落到原型链上的 nativeToString —— 消除"方法带 own toString"这一横扫整表面的统一 tell。
+   * 若 reparent 未落地(setPrototypeOf 被吞)则保留 own toString 兜底,避免泄漏。
+   *
+   * 真实 intrinsic(如 window.Object,本就 native)与已 wrap 过的函数自动跳过,保持最小改造面。
+   * 不动 .prototype:普通函数的 prototype 为 non-configurable,删不掉,属另一类泄漏(见独立 issue)。
+   * @returns {Function|undefined}  被 native 化的函数;target[name] 非函数时 undefined。
+   */
+  function wrap(target, name, len) {
+    const func = target == null ? undefined : target[name];
+    if (typeof func !== 'function') return undefined;
+    if (masked.has(func)) return func;                            // 已 wrap,幂等跳过
+    if (origToString.call(func).includes('[native code]')) return func; // 真 intrinsic,本就 native,不动
+    fn(func, name, len);                                          // name←属性名、length、masked、own toString、reparent
+    if (Object.getPrototypeOf(func) === WFunctionProto) {
+      delete func.toString;                                       // reparent 落地 → 删 own toString,回落原型链 nativeToString
+    }
+    return func;
+  }
+
   /** 对象类型标签:Object.prototype.toString.call(obj) → [object Name]。 */
   function tag(obj, name) {
     Object.defineProperty(obj, Symbol.toStringTag, {
@@ -115,5 +141,5 @@ export function createMask(window) {
     }
   }
 
-  return { fn, tag, iface, mixin, adopt, boot };
+  return { fn, wrap, tag, iface, mixin, adopt, boot };
 }
