@@ -40,7 +40,3 @@ venv/
 # Build
 dist/
 build/
-
-# 第三方参考(不纳入版本管理;reference/legacy 为自研旧实现,保留)
-reference/sdenv/
-reference/sdenv-extend/
