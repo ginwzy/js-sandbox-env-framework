@@ -24,6 +24,21 @@ export default {
     const stop = window.Object.prototype; // 原型链上界:核心 intrinsic 不碰
     const swept = new Set();
 
+    // 方法 arity 修正表(修复 r52:sweepOwn 调 mask.wrap 不传 len → fn() 跳过 .length 校正 → jsdom 形参个数泄漏)。
+    // ground truth = L2 真机结构基线 linux-chrome-v143 的 fn.length。只列 jsdom 与真机 Chrome 不一致、经 diff 实证的方法 ——
+    // jsdom 余者 arity 已与真机一致(否则会有成片 fn.length TELL),故精确修正而非全量覆盖。
+    // 纪律:scroll/scrollBy/scrollTo 真机即 0(实测 jsdom 亦 0,已对),刻意不入表 —— 避免被 move/resize 族(真机 2)一刀切污染。
+    // key = sweep 时计算的 owner label(window 自有 / <Ctor>.prototype),取自插桩实测的 wrap 生效点。
+    const ARITY = {
+      window: { moveBy: 2, moveTo: 2, resizeBy: 2, resizeTo: 2, postMessage: 1 },
+      'Document.prototype': { evaluate: 2, createExpression: 1 },
+    };
+    const arityOf = (obj, key) => {
+      const label = obj === window ? 'window' : (((obj.constructor && obj.constructor.name) || '') + '.prototype');
+      const t = ARITY[label];
+      return t && typeof t[key] === 'number' ? t[key] : undefined;
+    };
+
     // 扫一个对象的自有函数属性。跳过 constructor —— 它指向类, wrap 会把其 name 误改成 'constructor'。
     const sweepOwn = (obj) => {
       if (!obj || obj === stop || swept.has(obj)) return;
@@ -31,7 +46,7 @@ export default {
       for (const key of Object.getOwnPropertyNames(obj)) {
         if (key === 'constructor') continue;
         const d = Object.getOwnPropertyDescriptor(obj, key);
-        if (d && typeof d.value === 'function') mask.wrap(obj, key); // 访问器(d.get/d.set)不在此处理
+        if (d && typeof d.value === 'function') mask.wrap(obj, key, arityOf(obj, key)); // len 仅校正实证 arity 偏差;访问器(d.get/d.set)不在此处理
       }
     };
 
