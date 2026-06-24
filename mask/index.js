@@ -279,8 +279,19 @@ export function createMask(window) {
     }
   }
 
+  /**
+   * window-realm Promise 壳(各 patch 的方法壳常用)。一律用 window.Promise(非宿主 Promise)对齐 realm 身份:
+   *   promise(v) —— 即时 resolve 到 window-realm Promise(void→resolve 语义)。
+   *   pending()  —— 永久挂起:既不 resolve 给假数据、也不 reject 触发 unhandledrejection
+   *                 (用于返回复杂对象 MediaStream/BatteryManager/竞价结果 的方法壳;真机对正常请求亦 pending 至响应)。
+   * 收敛于此一处,免"不 reject/不 resolve"这一不变量被各 patch 复制后漂移。resolved 值的 adopt 由调用点负责。
+   */
+  const promise = (v) => window.Promise.resolve(v);
+  const pending = () => new window.Promise(() => {});
+
   return {
     fn, native, dropOwnToString, wrap, wrapAccessor, deproto, hook, tag,
     iface, singleton, method, methods, accessor, accessors, mixin, adopt, boot,
+    promise, pending,
   };
 }

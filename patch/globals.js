@@ -13,11 +13,9 @@
 const desktopOnly = (t) => t.formFactor === 'desktop';
 // Chrome-vs-WebView 特性差(与桌面/移动无关):WebView 缺的 Chrome 专属 secure-context API 归此。
 const chromeHost = (t) => t.host === 'chrome';
-function methodTable(window, adopt) {
+function methodTable(window, mask) {
   const W = window;
-  // 永久 pending 的 window-realm Promise:真机对正常请求返回 pending 至响应,
-  // 壳取最不惊扰行为(不 reject 触发 unhandledrejection,不 resolve 给假数据)。
-  const pending = () => new W.Promise(() => {});
+  const { pending, adopt } = mask; // window-realm Promise 壳(语义见 mask)
   return [
     ['fetch', 1, () => pending()],
     ['createImageBitmap', 1, () => pending()],
@@ -58,11 +56,11 @@ export default {
   name: 'globals',
   after: ['window'],
   apply({ window, mask, traits, profile }) {
-    const { native } = mask;
+    const { native, pending } = mask;
     const W = window;
     const ET = window.EventTarget.prototype; // 多数接口继承 EventTarget
 
-    for (const [name, len, impl, gate] of methodTable(window, mask.adopt)) {
+    for (const [name, len, impl, gate] of methodTable(window, mask)) {
       if (gate && !gate(traits)) continue;              // 平台差异方法门控(据真机基线)
       if (typeof window[name] === 'function') continue; // jsdom 已提供则不覆盖
       window[name] = native(impl, name, len);
@@ -94,10 +92,8 @@ export default {
       return Ctor;
     };
 
-    // illegal-constructor 单例:类不可 new,但有一个全局实例(indexedDB / visualViewport)。直接用 mask.singleton。
+    // illegal-constructor 单例:类不可 new,但有一个全局实例(indexedDB / visualViewport)。取别名与 makeCtor 平行。
     const makeSingleton = mask.singleton;
-
-    const pending = () => new W.Promise(() => {});
 
     // Worker:postMessage/terminate;不真正加载脚本(壳),保留可 addEventListener。
     if (typeof W.Worker !== 'function') {

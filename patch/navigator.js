@@ -36,10 +36,8 @@ export default {
     // 真机:多为 accessor getter 返回内部接口实例,少数为 data 方法。形态对齐基线
     // (data 方法 w+e+c;accessor get native/length0/set null)。行为为可信壳。
     const proto = window.Navigator.prototype;
-    const promise = (v) => window.Promise.resolve(v);
-    // 永久 pending 的 window-realm Promise:壳取最不惊扰行为(不 resolve 给假数据、不 reject 触发
-    // unhandledrejection)。用于返回复杂对象(MediaStream / BatteryManager / 竞价结果)的方法。
-    const pending = () => new window.Promise(() => {});
+    // window-realm Promise 壳(promise=即时 resolve;pending=永久挂起,语义与不变量见 mask)。
+    const { promise, pending } = mask;
 
     // data 方法:真机为 Navigator.prototype 上 enumerable 的 data 方法。jsdom 已有则不覆盖。
     const dataMethod = (mname, len, impl) => {
@@ -183,7 +181,7 @@ export default {
     };
     const addIfaces = (table) => {
       for (const [key, [className, opts = {}]] of Object.entries(table)) {
-        const inst = ifaceInstance(className, opts.methods || {}, opts.props || {});
+        const inst = mask.singleton(className, opts); // 表项 opts 即 singleton opts,直接透传(不拆-合)
         accessors[key] = () => inst;
       }
     };
