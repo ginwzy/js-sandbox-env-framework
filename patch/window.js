@@ -29,15 +29,46 @@ export default {
     // jsdom 余者 arity 已与真机一致(否则会有成片 fn.length TELL),故精确修正而非全量覆盖。
     // 纪律:scroll/scrollBy/scrollTo 真机即 0(实测 jsdom 亦 0,已对),刻意不入表 —— 避免被 move/resize 族(真机 2)一刀切污染。
     // key = sweep 时计算的 owner label(window 自有 / <Ctor>.prototype),取自插桩实测的 wrap 生效点。
+    // sweep 时计算的 owner label(window 自有 / <Ctor>.prototype),ARITY / NO_PROTOTYPE 共用为键。
+    const labelOf = (obj) => (obj === window ? 'window' : (((obj.constructor && obj.constructor.name) || '') + '.prototype'));
+
     const ARITY = {
       window: { moveBy: 2, moveTo: 2, resizeBy: 2, resizeTo: 2, postMessage: 1 },
       'Document.prototype': { evaluate: 2, createExpression: 1 },
     };
     const arityOf = (obj, key) => {
-      const label = obj === window ? 'window' : (((obj.constructor && obj.constructor.name) || '') + '.prototype');
-      const t = ARITY[label];
+      const t = ARITY[labelOf(obj)];
       return t && typeof t[key] === 'number' ? t[key] : undefined;
     };
+
+    // .prototype 残留清除目标:真机 native 方法无 own .prototype,但 jsdom 把这些实现为普通 function
+    // declaration → 残留 .prototype(non-configurable 删不掉)。ground truth = L2 真机结构基线的
+    // fn.hasPrototype===false 名集(详见 docs/spec/prototype-residue-elimination.md)。
+    // 刻意用基线而非运行时启发式:writable/vestigial 启发式会误伤 Window/StyleSheet/CSSRule 等真机有
+    // .prototype、jsdom 却把 prototype 留空的接口构造器 —— 运行时分不清"jsdom 没填"与"本就是 helper"。
+    // mask.deproto 仅当"名在表 且 jsdom 确有残留 .prototype"才替换;漏列只残留 tell(被 diff/gate 抓),
+    // 不会误伤构造器(对比"排除名单"漏列会破坏 new)。window helper 绑 window(singleton receiver);
+    // Document.prototype 方法 receiver 随实例变,deproto 走 this-转发 forwarder(bindTo 省略)。
+    // 刻意排除 print:平台分歧 —— desktop Chrome 是 native(hasPrototype=false),Android WebView 却把
+    //   print 实现为 JS shim(hasPrototype=true、name="")。两基线唯一分歧项;留它带 jsdom 原状,避免按
+    //   桌面口径剥 proto 反而偏离 webview 真机。其 name/toStringNative 另属 webview shim 仿真,单独处理。
+    const NO_PROTOTYPE = {
+      window: new Set([
+        'alert', 'atob', 'blur', 'btoa', 'cancelAnimationFrame', 'cancelIdleCallback', 'captureEvents',
+        'clearInterval', 'clearTimeout', 'close', 'confirm', 'createImageBitmap', 'fetch', 'find', 'focus',
+        'getComputedStyle', 'getSelection', 'matchMedia', 'moveBy', 'moveTo', 'open', 'postMessage',
+        'prompt', 'queueMicrotask', 'releaseEvents', 'reportError', 'requestAnimationFrame', 'requestIdleCallback',
+        'resizeBy', 'resizeTo', 'scroll', 'scrollBy', 'scrollTo', 'setInterval', 'setTimeout', 'stop',
+        'structuredClone', 'webkitCancelAnimationFrame', 'webkitRequestAnimationFrame',
+        'webkitRequestFileSystem', 'webkitResolveLocalFileSystemURL',
+      ]),
+      'Document.prototype': new Set(['evaluate', 'createExpression', 'createNSResolver']),
+    };
+    const noProtoOf = (obj, key) => {
+      const s = NO_PROTOTYPE[labelOf(obj)];
+      return !!(s && s.has(key));
+    };
+    const hasOwnProto = (f) => Object.prototype.hasOwnProperty.call(f, 'prototype');
 
     // 扫一个对象的自有函数属性。跳过 constructor —— 它指向类, wrap 会把其 name 误改成 'constructor'。
     const sweepOwn = (obj) => {
@@ -47,8 +78,15 @@ export default {
         if (key === 'constructor') continue;
         const d = Object.getOwnPropertyDescriptor(obj, key);
         if (d) {
-          if (typeof d.value === 'function') mask.wrap(obj, key, arityOf(obj, key)); // data 方法:len 仅校正实证 arity 偏差
-          else if (d.get || d.set) mask.wrapAccessor(obj, key);                       // jsdom 原生访问器:get/set 一并 native 化
+          if (typeof d.value === 'function') {
+            const len = arityOf(obj, key);                                           // len 仅校正实证 arity 偏差
+            // 残留 .prototype 的具名普通函数:换无-prototype callable(window 绑 window,原型方法转发 this);
+            // 余者仅外观 native 化。仅当 jsdom 确有残留时才走 deproto,避免无谓替换 webidl 方法。
+            if (noProtoOf(obj, key) && hasOwnProto(d.value)) mask.deproto(obj, key, len, obj === window ? window : undefined);
+            else mask.wrap(obj, key, len);
+          } else if (d.get || d.set) {
+            mask.wrapAccessor(obj, key);                                             // jsdom 原生访问器:get/set 一并 native 化
+          }
         }
       }
     };

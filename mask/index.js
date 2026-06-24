@@ -142,6 +142,35 @@ export function createMask(window) {
     }
   }
 
+  /**
+   * 消除"对象上具名普通函数"残留的 .prototype own 属性(对照 wrap 只改外观,deproto 还换函数对象)。
+   * 根因:jsdom 把 atob/setTimeout/XPath 等实现为普通 function declaration —— 其 prototype 描述符
+   * non-configurable,delete / 赋值都删不掉,Proxy 受 non-configurable 不变式约束亦无法隐藏(连 has
+   * trap 都不能返回 false)。真机 native 方法无 own .prototype,残留即 tell。唯一出路:用本就无 .prototype
+   * 的 callable 整体替换函数对象,再过 fn() 掩码。据 receiver 形态择制造法:
+   *   bindTo 给定(singleton receiver,如 window 自有 helper)→ orig.bind(bindTo):无 .prototype、
+   *     自动继承 length、不在错误栈注入包装帧。jsdom 实现 this-宽容(实测错 this 不抛),绑定固定
+   *     receiver 不破坏正常调用。
+   *   bindTo 省略(per-instance receiver,如 Document.prototype 方法,this 随实例变)→ concise-method
+   *     forwarder:转发 this(故能跨实例工作),其 length 砸为 0、须由 fn() 显式校正。
+   * 两路皆经 fn():name←属性名(bound 的 'bound X' 一并校正)、length 校正、masked/toString native、
+   * reparent + 删 own toString。choose 名集见调用方(patch/window 的 NO_PROTOTYPE,据 L2 基线 hasPrototype)。
+   * @returns {Function|undefined}  替换后的新函数;非函数 / 描述符不可替换则 undefined(不破坏原状)。
+   */
+  function deproto(target, name, len, bindTo) {
+    const orig = target == null ? undefined : target[name];
+    if (typeof orig !== 'function') return undefined;
+    if (masked.has(orig)) return orig;                               // 已处理,幂等
+    const d = Object.getOwnPropertyDescriptor(target, name);
+    if (!d || !d.configurable || !('value' in d)) return undefined;  // 不可替换 → 不破坏,跳过
+    const repl = bindTo !== undefined
+      ? orig.bind(bindTo)
+      : ({ [name](...a) { return orig.apply(this, a); } })[name];
+    dropOwnToString(fn(repl, name, typeof len === 'number' ? len : orig.length));
+    Object.defineProperty(target, name, { ...d, value: repl });
+    return repl;
+  }
+
   /** 对象类型标签:Object.prototype.toString.call(obj) → [object Name]。 */
   function tag(obj, name) {
     Object.defineProperty(obj, Symbol.toStringTag, {
@@ -173,7 +202,10 @@ export function createMask(window) {
   function mixin(target, getters) {
     const proto = Object.getPrototypeOf(target) || target;
     for (const [key, getValue] of Object.entries(getters)) {
-      const get = dropOwnToString(fn(function () { return adopt(getValue()); }, `get ${key}`)); // 删 fn 写入的 own toString(对齐 wrap/hook),消除 getter own-toString tell
+      // 箭头函数造 getter:普通函数有 .prototype own 属性、真机 getter 无 —— 箭头无 .prototype,消除该残留。
+      // getValue 闭包只读闭包变量(profile/nav/conn)、不用 this,改箭头不破坏调用语义。
+      // dropOwnToString 删 fn 写入的 own toString(对齐 wrap/hook),消除 getter own-toString tell。
+      const get = dropOwnToString(fn(() => adopt(getValue()), `get ${key}`));
       const desc = { get, configurable: true, enumerable: true };
       try {
         Object.defineProperty(proto, key, desc);
@@ -194,5 +226,5 @@ export function createMask(window) {
     }
   }
 
-  return { fn, wrap, wrapAccessor, hook, tag, iface, mixin, adopt, boot };
+  return { fn, wrap, wrapAccessor, deproto, hook, tag, iface, mixin, adopt, boot };
 }

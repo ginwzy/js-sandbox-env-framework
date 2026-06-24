@@ -45,14 +45,12 @@ const fnT = (id, fn) => ({ id, category: 'function', resolved: true, fn });
   ok('访问器半边缺失 → 未被白名单 → gate FAIL', !!e && !e.whitelist && s.gatePass === false);
 }
 
-// —— Fix 3:ownNames 白名单只放行"恰多出 prototype",夹带泄漏键则不放行 ——
+// —— 方法残留 .prototype 已修(deproto):fn.hasPrototype / fn.ownNames 残留不再白名单,直接阻断 ——
 {
-  const legit = { targetId: 'window.atob', t1: true, key: null, field: 'fn.ownNames', bucket: 'TELL', baseline: 'length,name', mimic: 'length,name,prototype' };
-  const evil = { targetId: 'window.atob', t1: true, key: null, field: 'fn.ownNames', bucket: 'TELL', baseline: 'length,name', mimic: 'evilLeak,length,name,prototype' };
-  const substr = { targetId: 'window.atob', t1: true, key: null, field: 'fn.ownNames', bucket: 'TELL', baseline: 'length,name', mimic: 'length,name,prototypeFoo' };
-  ok('ownNames 恰多出 prototype → 白名单 yvq.11', classify(legit) === 'yvq.11');
-  ok('ownNames 夹带 evilLeak → 不白名单', classify(evil) === null);
-  ok('ownNames 仅子串 prototypeFoo → 不白名单', classify(substr) === null);
+  const hp = { targetId: 'window.atob', t1: true, key: null, field: 'fn.hasPrototype', bucket: 'TELL', baseline: false, mimic: true };
+  const on = { targetId: 'window.atob', t1: true, key: null, field: 'fn.ownNames', bucket: 'TELL', baseline: 'length,name', mimic: 'length,name,prototype' };
+  ok('fn.hasPrototype 残留 → 不再白名单(deproto 已真修)', classify(hp) === null);
+  ok('fn.ownNames 多出 prototype → 不再白名单(deproto 已真修)', classify(on) === null);
 }
 
 // —— sanity:length 不一致(种子场景)→ 未白名单 TELL → gate FAIL ——
@@ -63,7 +61,7 @@ const fnT = (id, fn) => ({ id, category: 'function', resolved: true, fn });
   const lenTell = entries.find((e) => e.field === 'fn.length');
   const s = summarize(entries);
   ok('length 不一致 → TELL 阻断', !!lenTell && lenTell.bucket === 'TELL' && !lenTell.whitelist && s.gatePass === false);
-  ok('hasPrototype 残留 → 落 yvq.11 白名单', entries.some((e) => e.field === 'fn.hasPrototype' && e.whitelist === 'yvq.11'));
+  ok('hasPrototype 残留 → 直接阻断(无白名单)', entries.some((e) => e.field === 'fn.hasPrototype' && !e.whitelist && e.bucket === 'TELL'));
 }
 
 // —— MISSING 永不阻断 gate ——

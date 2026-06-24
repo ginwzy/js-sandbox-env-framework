@@ -6,7 +6,7 @@
  * 该任务修复后删掉对应规则,即可让 gate 重新守住它。
  *
  * 验收口径:"T1 已修目标应零 divergence 或仅落白名单"。下列即"仅落白名单"的那部分 ——
- * 涵盖方法残留 .prototype / jsdom 缺对象覆盖缺口 / webidl 内部 symbol 泄漏等已知未尽项。
+ * 涵盖 jsdom 缺对象覆盖缺口 / webidl 内部 symbol 泄漏等已知未尽项。
  */
 
 /**
@@ -21,25 +21,10 @@
 
 /** @type {Array<{issue:string, reason:string, match:(e:DiffEntry)=>boolean}>} */
 export const RULES = [
-  {
-    issue: 'yvq.11',
-    reason: 'jsdom 把这些实现为普通函数声明,.prototype 为 non-configurable 删不掉 —— wrap 不动 .prototype,残留属另一类泄漏。',
-    match: (e) => e.bucket === 'TELL' && e.field === 'fn.hasPrototype' && e.mimic === true && e.baseline === false,
-  },
-  {
-    issue: 'yvq.11',
-    reason: '同上:native 化的 window 方法 own 键差异恰为多出 prototype 一项(["length","name"]→[...,"prototype"]),其余键集合一致。差异不止 prototype(如夹带其他泄漏键)则不放行。',
-    match: (e) => {
-      if (!(e.bucket === 'TELL' && e.field === 'fn.ownNames'
-        && typeof e.mimic === 'string' && typeof e.baseline === 'string')) return false;
-      const b = new Set(e.baseline.split(',').filter(Boolean));
-      const m = new Set(e.mimic.split(',').filter(Boolean));
-      if (b.has('prototype')) return false;            // 基线本就有 prototype → 非"残留",不归此规则
-      for (const k of b) if (!m.has(k)) return false;  // 基线的键必须都还在(无缺失)
-      const extra = [...m].filter((k) => !b.has(k));
-      return extra.length === 1 && extra[0] === 'prototype'; // 多出的恰且仅为 prototype
-    },
-  },
+  // 方法残留 .prototype 已修:patch/window sweep 据 L2 基线 NO_PROTOTYPE 名集,经 mask.deproto 用无-prototype
+  // callable(window helper 绑 window 的 bound fn / Document.prototype 方法 this-转发 forwarder)替换原 jsdom
+  // 普通函数声明;mask.mixin 改箭头函数造 getter 消除访问器侧 .prototype 残留。原两条白名单规则
+  // (fn.hasPrototype / fn.ownNames 恰多出 prototype)已无匹配项,删除以让 gate 重新守住。
   // 访问器 native 化 + getter own-toString 已修:patch/window sweep 经 mask.wrapAccessor 把 jsdom 原生
   // accessor get/set 一并 native 化,mask.mixin 删自造 getter 的 own toString。原两条白名单规则
   // (accessor.get.toStringNative / accessor.(get|set).hasOwnToString)已无匹配项,删除以让 gate 重新守住。
