@@ -36,18 +36,15 @@ export default {
     // 真机:多为 accessor getter 返回内部接口实例,少数为 data 方法。形态对齐基线
     // (data 方法 w+e+c;accessor get native/length0/set null)。行为为可信壳。
     const proto = window.Navigator.prototype;
-    const native = (impl, fname, len) => mask.dropOwnToString(mask.fn(impl, fname, len));
     const promise = (v) => window.Promise.resolve(v);
     // 永久 pending 的 window-realm Promise:壳取最不惊扰行为(不 resolve 给假数据、不 reject 触发
     // unhandledrejection)。用于返回复杂对象(MediaStream / BatteryManager / 竞价结果)的方法。
     const pending = () => new window.Promise(() => {});
 
-    // data 方法:真机为 Navigator.prototype 上 enumerable 的 data 方法。
+    // data 方法:真机为 Navigator.prototype 上 enumerable 的 data 方法。jsdom 已有则不覆盖。
     const dataMethod = (mname, len, impl) => {
       if (mname in proto) return;
-      Object.defineProperty(proto, mname, {
-        value: native(impl, mname, len), writable: true, enumerable: true, configurable: true,
-      });
+      mask.method(proto, mname, len, impl);
     };
     dataMethod('getGamepads', 0, () => mask.adopt([]));
     dataMethod('sendBeacon', 1, () => true);
@@ -90,23 +87,12 @@ export default {
       for (const [m, [len, impl]] of Object.entries(secureMethods.chromeOnly)) dataMethod(m, len, impl);
     }
 
-    // 内部接口实例:iface 注册 window 全局类(真机这些类确为全局)+ proto 装 native 方法,create 出实例。
-    const ifaceInstance = (iname, methods = {}, props = {}) => {
-      const { proto: ip, create } = mask.iface(iname);
-      for (const [m, [len, impl]] of Object.entries(methods)) {
-        Object.defineProperty(ip, m, {
-          value: native(impl, m, len), writable: true, enumerable: true, configurable: true,
-        });
-      }
-      return create(props);
-    };
+    // 内部接口实例:mask.singleton 注册 window 全局类(真机这些类确为全局)+ proto 装 native 方法,
+    // 创建单例。本 patch 沿用 (iname, methods, props) 三参旧形,适配到 singleton 的 opts。
+    const ifaceInstance = (iname, methods = {}, props = {}) => mask.singleton(iname, { methods, props });
 
     const storage = mask.iface('DeprecatedStorageQuota');
-    for (const [m, len] of [['queryUsageAndQuota', 2], ['requestQuota', 2]]) {
-      Object.defineProperty(storage.proto, m, {
-        value: native(() => undefined, m, len), writable: true, enumerable: true, configurable: true,
-      });
-    }
+    mask.methods(storage.proto, { queryUsageAndQuota: [2, () => undefined], requestQuota: [2, () => undefined] });
 
     // 接口实例 eager 化:真机这些全局类(window.Permissions 等)无条件存在、且 navigator.X 是单例
     // (多次访问返回同一对象)。故先建实例 + 注册全局类,getter 仅返回单例 —— 不在 getter 内重建

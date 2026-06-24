@@ -78,6 +78,17 @@ export function createMask(window) {
   }
 
   /**
+   * 把一个**新建**函数对象 native 化(= dropOwnToString ∘ fn):换 toString 外观、校正 name/length、
+   * reparent 到 window.Function 身份、落地后删 own toString。是 patch 装 native 方法/getter 的统一入口。
+   * 与 wrap 的分工:wrap 接管"对象上已存在的具名函数"(masked 幂等守卫 + 跳过真 intrinsic);native 接管
+   * "显式传入的壳/构造器函数",无需守卫。原先各 patch 自定义同名 helper 复制此组合(navigator/globals/
+   * uadata/plugins 各一份),现收敛于此 —— 与当初导出 dropOwnToString 同理,免"微妙判定被复制后漂移"。
+   */
+  function native(impl, name, len) {
+    return dropOwnToString(fn(impl, name, len));
+  }
+
+  /**
    * 把"对象上按名已存在的方法/构造器"原地 native 化(对照 sdenv setFuncNative,但用 WeakSet 标记免同名误伤)。
    * 消除 jsdom 内置函数 toString 暴露实现源码的泄漏:window.atob.toString() → 'function atob() { [native code] }'。
    *
@@ -185,7 +196,14 @@ export function createMask(window) {
    * 在真实浏览器是全局可见的,故注册到 window。
    * @returns {{ ctor: Function, proto: object, create: (props?:object)=>object }}
    */
+  const ifaceRegistry = new Map();
   function iface(name, props = {}) {
+    // 重名守卫:两个 patch 抢注同名 window 接口类会令后者静默覆盖前者(且先注册的实例 proto 身份分裂)。
+    // 命中即复用首注册(幂等)并经宿主 console 告警(Node realm,非页面可见)—— 把设计冲突暴露而不崩 realm。
+    if (ifaceRegistry.has(name)) {
+      try { console.warn(`[mask.iface] 重复注册 window.${name},复用首注册(检查是否两 patch 抢注)`); } catch { /* noop */ }
+      return ifaceRegistry.get(name);
+    }
     const ctor = fn(function () { throw new TypeError('Illegal constructor'); }, name);
     const proto = adopt(tag({ ...props }, name)); // proto 链落在 window.Object.prototype
     ctor.prototype = proto;
@@ -193,26 +211,60 @@ export function createMask(window) {
     Object.defineProperty(window, name, { value: ctor, writable: true, configurable: true, enumerable: false });
     /** 基于该接口原型创建一个 window 身份的实例。 */
     const create = (extra = {}) => Object.assign(Object.create(proto), extra);
-    return { ctor, proto, create };
+    const reg = { ctor, proto, create };
+    ifaceRegistry.set(name, reg);
+    return reg;
   }
 
   /**
-   * 以"原型 getter"覆盖对象属性(而非 data property),并自动 native 化每个 getter。
-   * 指纹三件套:原型位置 + accessor 描述符 + native getter;返回值经 adopt 对齐 window 身份。
+   * iface 的常见用法糖:建接口类 + 装 native 方法/getter(可选插父原型)+ 创建单例实例并返回。
+   * opts = { methods?, accessors?, props?, parent? }(methods/accessors 见下;props=实例自有数据;parent=
+   * 插入的父原型如 EventTarget.prototype)。需"一类多实例"或要分别操作 proto/create 的,直接用底层 iface。
    */
+  function singleton(name, opts = {}) {
+    const { proto, create } = iface(name);
+    if (opts.parent) Object.setPrototypeOf(proto, opts.parent);
+    methods(proto, opts.methods || {});
+    accessors(proto, opts.accessors || {});
+    return create(opts.props || {});
+  }
+
+  /**
+   * 装 native data 方法(真机 prototype 上 enumerable 方法形态:value=native fn,writable+enumerable+
+   * configurable)。method=单个;methods=批量,table = { name: [len, impl] }。各 patch 原 defineMethods/
+   * dataMethod 循环的收敛点 —— 想覆盖既有 jsdom 方法或挑非默认 flags 的,自行 defineProperty。
+   */
+  function method(target, name, len, impl) {
+    Object.defineProperty(target, name, {
+      value: native(impl, name, len), writable: true, enumerable: true, configurable: true,
+    });
+    return target;
+  }
+  function methods(target, table) {
+    for (const [name, [len, impl]] of Object.entries(table)) method(target, name, len, impl);
+    return target;
+  }
+
+  /**
+   * 装 native accessor getter:get 为 native(箭头无 .prototype、len0、无 own toString),无 set,enumerable;
+   * 返回值经 adopt 对齐 window 身份。三个层次共用同一 getter 形态(指纹三件套:原型位置 + accessor 描述符 +
+   * native getter):accessor=装在 target 自身;accessors=批量;mixin=装在 target 的**原型**上(标量指纹
+   * 覆盖,如 navigator.userAgent)。getValue 闭包只读闭包变量(profile/单例)、不用 this,故箭头安全。
+   */
+  function accessor(target, name, getValue) {
+    Object.defineProperty(target, name, {
+      get: native(() => adopt(getValue()), `get ${name}`), enumerable: true, configurable: true,
+    });
+    return target;
+  }
+  function accessors(target, table) {
+    for (const [name, getValue] of Object.entries(table)) accessor(target, name, getValue);
+    return target;
+  }
   function mixin(target, getters) {
     const proto = Object.getPrototypeOf(target) || target;
     for (const [key, getValue] of Object.entries(getters)) {
-      // 箭头函数造 getter:普通函数有 .prototype own 属性、真机 getter 无 —— 箭头无 .prototype,消除该残留。
-      // getValue 闭包只读闭包变量(profile/nav/conn)、不用 this,改箭头不破坏调用语义。
-      // dropOwnToString 删 fn 写入的 own toString(对齐 wrap/hook),消除 getter own-toString tell。
-      const get = dropOwnToString(fn(() => adopt(getValue()), `get ${key}`));
-      const desc = { get, configurable: true, enumerable: true };
-      try {
-        Object.defineProperty(proto, key, desc);
-      } catch {
-        Object.defineProperty(target, key, desc);
-      }
+      try { accessor(proto, key, getValue); } catch { accessor(target, key, getValue); }
     }
     return target;
   }
@@ -227,5 +279,8 @@ export function createMask(window) {
     }
   }
 
-  return { fn, dropOwnToString, wrap, wrapAccessor, deproto, hook, tag, iface, mixin, adopt, boot };
+  return {
+    fn, native, dropOwnToString, wrap, wrapAccessor, deproto, hook, tag,
+    iface, singleton, method, methods, accessor, accessors, mixin, adopt, boot,
+  };
 }

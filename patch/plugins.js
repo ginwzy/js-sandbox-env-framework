@@ -25,14 +25,7 @@ export default {
   after: ['navigator'],
   applies: (t) => t.host === 'chrome',
   apply({ window, mask }) {
-    const native = (impl, name, len) => mask.dropOwnToString(mask.fn(impl, name, len));
-    const defineMethods = (target, methods) => {
-      for (const [m, [len, impl]] of Object.entries(methods)) {
-        Object.defineProperty(target, m, {
-          value: native(impl, m, len), writable: true, enumerable: true, configurable: true,
-        });
-      }
-    };
+    const defineMethods = mask.methods;
     // 类数组容器:索引 own 属性(enumerable)+ named(non-enumerable)+ length(non-enumerable data)。
     // 真机 length 在 prototype 为 accessor;此处简化为实例 data(harness 不探此深度)。
     const fillCollection = (arr, items, keyOf) => {

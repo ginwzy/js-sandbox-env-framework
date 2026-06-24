@@ -56,7 +56,6 @@ export default {
   apply({ window, profile, mask, traits }) {
     if (window.navigator.userAgentData) return; // 已存在则不覆盖
 
-    const native = (impl, name, len) => mask.dropOwnToString(mask.fn(impl, name, len));
     const captured = profile.get('navigator.userAgentData', null);
     const d = derive(profile, traits);
 
@@ -69,25 +68,21 @@ export default {
     const highAll = { ...d.high, ...(captured || {}), brands, mobile, platform };
     delete highAll.brands; // brands/mobile/platform 是低熵基属性,下面单独装;high 投影时再并回
 
-    const { proto, create } = mask.iface('NavigatorUAData');
-    Object.defineProperty(proto, 'getHighEntropyValues', {
-      value: native((hints) => {
-        const base = { brands: mask.adopt(brands.map((b) => mask.adopt({ ...b }))), mobile, platform };
-        const list = Array.isArray(hints) ? hints : [];
-        for (const h of list) if (h in highAll) base[h] = mask.adopt(highAll[h]);
-        return window.Promise.resolve(mask.adopt(base));
-      }, 'getHighEntropyValues', 1),
-      writable: true, enumerable: true, configurable: true,
-    });
-    Object.defineProperty(proto, 'toJSON', {
-      value: native(() => mask.adopt({ brands: brands.map((b) => ({ ...b })), mobile, platform }), 'toJSON', 0),
-      writable: true, enumerable: true, configurable: true,
-    });
-
-    const uaData = create({
-      brands: mask.adopt(brands.map((b) => mask.adopt({ ...b }))),
-      mobile,
-      platform,
+    const uaData = mask.singleton('NavigatorUAData', {
+      methods: {
+        getHighEntropyValues: [1, (hints) => {
+          const base = { brands: mask.adopt(brands.map((b) => mask.adopt({ ...b }))), mobile, platform };
+          const list = Array.isArray(hints) ? hints : [];
+          for (const h of list) if (h in highAll) base[h] = mask.adopt(highAll[h]);
+          return window.Promise.resolve(mask.adopt(base));
+        }],
+        toJSON: [0, () => mask.adopt({ brands: brands.map((b) => ({ ...b })), mobile, platform })],
+      },
+      props: {
+        brands: mask.adopt(brands.map((b) => mask.adopt({ ...b }))),
+        mobile,
+        platform,
+      },
     });
 
     mask.mixin(window.navigator, { userAgentData: () => uaData });

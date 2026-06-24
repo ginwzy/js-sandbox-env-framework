@@ -58,7 +58,7 @@ export default {
   name: 'globals',
   after: ['window'],
   apply({ window, mask, traits, profile }) {
-    const native = (impl, name, len) => mask.dropOwnToString(mask.fn(impl, name, len));
+    const { native } = mask;
     const W = window;
     const ET = window.EventTarget.prototype; // 多数接口继承 EventTarget
 
@@ -68,21 +68,10 @@ export default {
       window[name] = native(impl, name, len);
     }
 
-    // 装配 helper:方法(data,w+e+c)/ 访问器(get native,length0,set null)。
-    const defineMethods = (target, methods) => {
-      for (const [m, [len, impl]] of Object.entries(methods)) {
-        Object.defineProperty(target, m, {
-          value: native(impl, m, len), writable: true, enumerable: true, configurable: true,
-        });
-      }
-    };
-    const defineAccessors = (target, accessors) => {
-      for (const [k, getVal] of Object.entries(accessors)) {
-        Object.defineProperty(target, k, {
-          get: native(() => mask.adopt(getVal()), `get ${k}`), enumerable: true, configurable: true,
-        });
-      }
-    };
+    // 装配 helper:方法(data,w+e+c)/ 访问器(get native,length0,set null)。收敛进 mask 后此处仅
+    // 取别名 —— 局部名保留是为下面 makeCtor/单例壳的调用点可读(defineMethods(proto,…) 比 mask.methods 更近场景)。
+    const defineMethods = mask.methods;
+    const defineAccessors = mask.accessors;
 
     // 可 new 的接口类壳(真机非 illegal constructor,多继承 EventTarget)。
     // 注:这些不在 harness probe 目标内(盲区),形态靠运行时自测,无真机基线对照。
@@ -105,14 +94,8 @@ export default {
       return Ctor;
     };
 
-    // illegal-constructor 单例:类不可 new,但有一个全局实例(indexedDB / visualViewport)。
-    const makeSingleton = (name, { parent, methods = {}, accessors = {}, props = {} } = {}) => {
-      const { proto, create } = mask.iface(name);
-      if (parent) Object.setPrototypeOf(proto, parent);
-      defineMethods(proto, methods);
-      defineAccessors(proto, accessors);
-      return create(props);
-    };
+    // illegal-constructor 单例:类不可 new,但有一个全局实例(indexedDB / visualViewport)。直接用 mask.singleton。
+    const makeSingleton = mask.singleton;
 
     const pending = () => new W.Promise(() => {});
 
