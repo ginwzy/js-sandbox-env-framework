@@ -86,30 +86,33 @@ export function startCapture({ port = 8970 } = {}) {
       req.on('end', () => {
         try {
           const { profileRaw, probeSnapshot } = splitPayload(JSON.parse(body));
-          if (!profileRaw) throw new Error('负载缺 profileRaw(命名锚点)');
-          // 派生一次 name,显式同名传给两次落盘 → profile 与 baseline 同源配对。
-          const name = safeName(url.searchParams.get('name') || suggestName(deriveTraits(profileRaw)));
-          const out = { name };
+          if (!profileRaw && !probeSnapshot) throw new Error('负载空(profileRaw / probeSnapshot 皆缺)');
+          // 命名锚点优先取 profileRaw(身份值含 UA);若其缺失(客户端 capture 半失败,仅 probe 成功),
+          // 让 name=null → saveBaseline 自派生(从 probe.meta.ua),保证"只采到 probe"那半也能独立落盘。
+          const hint = url.searchParams.get('name') || (profileRaw ? suggestName(deriveTraits(profileRaw)) : null);
+          const name = hint ? safeName(hint) : null;
+          const out = {};
 
-          // 两次落盘各自 try/catch:一侧失败不拖累另一侧(保持旧双服务的独立性,不退化成 all-or-nothing)。
-          try {
-            out.profile = saveProfile(profileRaw, name);
-            console.log(`\n✓ profile 落盘: ${out.profile.file}`);
-            console.log(`  traits: ${JSON.stringify(out.profile.traits)}`);
-            const absent = Object.entries(out.profile.fidelity).filter(([, v]) => v === 'absent').map(([k]) => k);
-            if (absent.length) console.log(`  ⚠ 渲染类未采集(absent): ${absent.join(', ')} —— 该 profile 部分合成`);
-            if (out.profile.problems.length) console.log(`  ⚠ 自洽性: ${out.profile.problems.join('; ')}`);
-          } catch (e) { out.profileError = e.message; console.log(`\n✗ profile 落盘失败: ${e.message}`); }
+          // 两侧落盘各自 try/catch:一侧失败/缺失不拖累另一侧(与客户端两半独立采集对称,不退化成 all-or-nothing)。
+          if (profileRaw) {
+            try {
+              out.profile = saveProfile(profileRaw, name);
+              console.log(`\n✓ profile 落盘: ${out.profile.file}`);
+              console.log(`  traits: ${JSON.stringify(out.profile.traits)}`);
+              const absent = Object.entries(out.profile.fidelity).filter(([, v]) => v === 'absent').map(([k]) => k);
+              if (absent.length) console.log(`  ⚠ 渲染类未采集(absent): ${absent.join(', ')} —— 该 profile 部分合成`);
+              if (out.profile.problems.length) console.log(`  ⚠ 自洽性: ${out.profile.problems.join('; ')}`);
+            } catch (e) { out.profileError = e.message; console.log(`\n✗ profile 落盘失败: ${e.message}`); }
+          }
 
           if (probeSnapshot) {
             try {
-              out.baseline = saveBaseline(probeSnapshot, name); // 同名 → baseline.meta.profile=name 显式配对
+              out.baseline = saveBaseline(probeSnapshot, name); // name 非空时同名 → baseline.meta.profile=name 显式配对
               console.log(`✓ baseline 落盘: ${out.baseline.file}  (targets ${out.baseline.resolved}/${out.baseline.targets} resolved)`);
             } catch (e) { out.baselineError = e.message; console.log(`✗ baseline 落盘失败: ${e.message}`); }
-          } else {
-            console.log('  ⚠ 本次无 probeSnapshot —— 仅落 profile,未产结构基线');
           }
 
+          out.name = out.profile?.name || out.baseline?.name;
           res.writeHead(200, { 'content-type': 'application/json' });
           res.end(JSON.stringify(out, null, 2));
         } catch (e) {
