@@ -43,16 +43,27 @@ export const RULES = [
     match: (e) => e.bucket === 'MISSING' && (e.targetId === 'window.chrome' || e.targetId === 'Screen.prototype'),
   },
   {
+    // corrected 基线(linux 经 localhost=secure context 重采)暴露的 secure-context 标准 API,jsdom 全缺。
+    // 旧基线(局域网 http 非 secure)采不到这些、故此前被掩盖 —— 与 userAgentData 同根因。两组:
+    //   - Navigator.prototype:clipboard/credentials/mediaDevices/storage/keyboard/protectedAudience 等 42 项;
+    //   - window 函数:getScreenDetails(Window Management)/queryLocalFonts(Local Font Access)/
+    //     show{Directory,Open,Save}*Picker(File System Access)。
+    issue: 'yvq.24',
+    reason: 'jsdom 缺 secure-context 标准 API(navigator.clipboard/credentials/mediaDevices/...、window File System Access/Window Management/Local Font Access)—— 覆盖缺口,独立任务。',
+    match: (e) => e.bucket === 'MISSING' && (e.targetId === 'Navigator.prototype' || /^window\.(getScreenDetails|queryLocalFonts|show(Directory|Open|Save)\w*Picker)$/.test(e.targetId)),
+  },
+  {
     issue: 'yvq.2',
     reason: 'jsdom 在 window/对象上以内部 Symbol(ctorRegistrySymbol 等)挂运行时构件,真 Chrome 无 —— webidl2js symbol 泄漏,独立任务。',
     match: (e) => e.bucket === 'EXTRA' && e.field === 'symbolKey',
   },
   {
-    // 基线缺陷型 divergence(非 mimic 过度注入):真机基线经非 secure context(局域网 http)采集,
-    // navigator.userAgentData 为 undefined 故基线无此键;mimic 正确注入(Chrome 131+ 必有)→ 表现为 EXTRA。
-    // 重采 secure context 基线后基线即含此键,本规则失配,删之即让 gate 守住(防真过度注入)。
+    // 基线缺陷型 divergence(非 mimic 过度注入):非 secure context(局域网 http)采集的基线缺
+    // navigator.userAgentData;mimic 正确注入(Chrome 131+ 必有)→ 表现为 EXTRA。
+    // linux-chrome-v143 已经 localhost(secure)重采、含此键,本规则对 linux 已失配;
+    // 仅 android-webview-v138(仍非 secure 采集,见 yvq.25)还命中。android 重采后即可删。
     issue: 'yvq.22',
-    reason: '真机基线非 secure context 采集缺 navigator.userAgentData;mimic 注入正确(Chrome 必有),属基线缺陷而非过度注入。',
+    reason: '非 secure context 采集的基线缺 navigator.userAgentData;mimic 注入正确(Chrome 必有),属基线缺陷而非过度注入。',
     match: (e) => e.bucket === 'EXTRA' && e.targetId === 'Navigator.prototype' && e.key === 'userAgentData',
   },
 ];
