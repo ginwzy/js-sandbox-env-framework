@@ -11,8 +11,14 @@
  * webview 序取自 android-webview-v138(mobile:含 contacts/connection 前置、无 chrome-only 键)。两序的键集
  * 与 patch 在对应 host 下的注入集一致(集合正确性见 diff 的 sameSet);本 pass 只改顺序。
  *
- * 当前仅 Navigator.prototype。Node/Event/HTMLDivElement.prototype 同根(jsdom 定义序≠Blink),待补各自 order
- * 数组接入同一 mask.reorderOwnKeys 机制(已知未尽项,单独推进)。
+ * 覆盖面与机制边界:本 pass 是**后置重排**,只能动 configurable 键 —— delete 后重建的键必然 append 到
+ * 残留键之后。故仅适用于"全 configurable"的原型:
+ *  - Navigator.prototype(80/56,全 configurable)✓
+ *  - HTMLDivElement.prototype(align,constructor,全 configurable)✓
+ *  - Node.prototype / Event.prototype:真机序里 configurable accessors 排在 non-configurable WebIDL 常量
+ *    (ELEMENT_NODE… / NONE,CAPTURING_PHASE…)**之前**,但 jsdom 把这些常量冻结在末尾、删不动。后置重排
+ *    无法把键插到冻结常量之前 → 结构上做不到,须在 jsdom 原型构造期拦截(另一种更深的技术,本 pass 不覆盖)。
+ *  DOM 原型的真机序 host 无关(同 Chromium 内核),故共用一张;Navigator 因 host 门控键集而异 → per-host。
  */
 
 // Navigator.prototype 真机 getOwnPropertyNames 序。键集随 host 门控而异 —— 用注入侧同一条 host 轴选择。
@@ -46,11 +52,17 @@ const NAVIGATOR_ORDER = {
   ],
 };
 
+// DOM 原型真机序(host 无关)。仅收"全 configurable"者(见上:Node/Event 受 non-configurable 常量阻塞,不入表)。
+const HTML_DIV_ELEMENT_ORDER = ['align', 'constructor'];
+
 export default {
   name: 'keyorder',
-  after: ['navigator', 'uadata', 'plugins'],
+  // after window:DOM 原型方法/访问器由 window sweep native 化,须在其后捕获最终描述符。
+  // after navigator/uadata/plugins:Navigator.prototype 键由三者共同贡献,须等键集齐备。
+  after: ['window', 'navigator', 'uadata', 'plugins'],
   apply({ window, mask, traits }) {
-    const order = NAVIGATOR_ORDER[traits.host];
-    if (order) mask.reorderOwnKeys(window.Navigator.prototype, order);
+    const navOrder = NAVIGATOR_ORDER[traits.host];
+    if (navOrder) mask.reorderOwnKeys(window.Navigator.prototype, navOrder);
+    mask.reorderOwnKeys(window.HTMLDivElement.prototype, HTML_DIV_ELEMENT_ORDER);
   },
 };
