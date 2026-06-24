@@ -3,9 +3,9 @@
  * 命令入口:
  *   mimic run     <script> [--profile name] [--trace]
  *   mimic check   <script> [--profile name]
- *   mimic capture [--port 8970]        起采集服务,目标设备访问后落盘 profile
+ *   mimic capture [--port 8970]        起统一采集服务,一次访问同源落 profile + 结构基线
  *   mimic diff    [profile] [--baseline name] [--t1] [--verbose] [--json]   结构面 mimic-vs-真机 diff
- *   mimic baseline [--port 8971]       起结构基线采集服务,真机访问后落盘到 harness/baselines/
+ *   mimic baseline [--port 8970]       [弃用别名] 等同 capture,统一服务已同时产结构基线
  *   mimic serve   [--port 3000]
  *   mimic profiles
  */
@@ -95,9 +95,12 @@ async function cmdDiff([profile], flags) {
   }
 }
 
+// 弃用别名:结构基线采集已并入统一 capture 服务(一次访问同源产 profile + baseline)。保留命令名不破
+// `npm run baseline` 与肌肉记忆,转调 startCapture。旧默认端口 8971 → 统一 8970。
 async function cmdBaseline(_rest, flags) {
-  const { startBaselineServer } = await import('../harness/server.js');
-  startBaselineServer({ port: Number(flags.port) || 8971 });
+  console.error('[弃用] `mimic baseline` 已并入 `mimic capture`(统一服务一次访问同源产 profile + 结构基线)。转启 capture。');
+  const { startCapture } = await import('../capture/server.js');
+  startCapture({ port: Number(flags.port) || 8970 });
 }
 
 function fail(msg) {

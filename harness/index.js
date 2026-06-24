@@ -4,7 +4,7 @@
  * runDiff:载入真机/种子基线 → mimic 跑同套 probe → diff → summarize → 报告对象。
  * CLI 与测试都走这一个入口。
  */
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { snapshotMimic } from './mimic-snapshot.js';
@@ -12,6 +12,7 @@ import { diff, summarize } from './diff.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const BASELINES_DIR = path.join(HERE, 'baselines');
+const PROFILES_DIR = path.resolve(HERE, '../profiles');
 
 /** 解析 baseline:绝对/相对路径直用;裸名到 baselines/<name>.json;省略则取 baselines/ 下第一个(内置 seed 默认已移除,需先经真机采集)。 */
 function resolveBaseline(ref) {
@@ -42,9 +43,11 @@ export function listBaselines() {
 export async function runDiff({ profile, baseline, t1Only = false } = {}) {
   const file = resolveBaseline(baseline);
   const base = JSON.parse(readFileSync(file, 'utf8'));
-  // 注意:基线 meta.profile 是"真机采集平台标识",非"要加载的伪装 profile" —— 不拿它当默认 profile,
-  // 否则 linux-chrome-v143 这类基线会去找不存在的 profiles/linux-chrome-v143.json。
-  const prof = profile || 'chrome-mac';
+  // 配对默认:统一采集服务同名落 profiles/<name>.json 与 baselines/<name>.json,故 profile 省略时优先取
+  // 与基线同名的 profile(同源、零人工配对)。仅当该同名 profile 不存在(旧的无配对基线,如真机采集的
+  // linux-chrome-v143 没有对应伪装 profile)才回退 chrome-mac —— 不会误去 load 不存在的文件。
+  const pairName = path.basename(file, '.json');
+  const prof = profile || (existsSync(path.join(PROFILES_DIR, `${pairName}.json`)) ? pairName : 'chrome-mac');
   const mimicSnap = await snapshotMimic(prof);
   const entries = diff(base, mimicSnap);
   const summary = summarize(entries, { t1Only });

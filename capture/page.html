@@ -14,31 +14,46 @@
   </style>
 </head>
 <body>
-  <h1>mimic — 真机环境采集</h1>
+  <h1>mimic — 真机环境采集(profile + 结构基线)</h1>
   <div id="status" class="run">采集中…</div>
-  <small>采集后自动回传并落盘到服务端 profiles/;下方为原始数据(可手动复制)。</small>
+  <small>一次访问同源回传:profiles/(身份值)+ harness/baselines/(结构面)。下方为原始数据(可手动复制)。</small>
   <textarea id="out" readonly></textarea>
 
+  <script src="/probe.js"></script>
   <script src="/collect.js"></script>
   <script>
     (async () => {
       const status = document.getElementById('status');
       const out = document.getElementById('out');
       try {
-        const data = await window.__capture__();
-        out.value = JSON.stringify(data, null, 2);
-        const res = await fetch('/capture', {
+        // probe 先跑:它要的是未被 canvas/WebGL 上下文获取等扰动的洁净结构态,与历史独立基线同源可比。
+        const probeSnapshot = window.__probe__();
+        probeSnapshot.meta = probeSnapshot.meta || {};
+        probeSnapshot.meta.source = 'chrome';
+        probeSnapshot.meta.ua = navigator.userAgent;
+        const profileRaw = await window.__capture__();
+
+        out.value = JSON.stringify({ profileRaw, probeSnapshot }, null, 2);
+        const res = await fetch('/capture' + location.search, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(data),
+          body: JSON.stringify({ profileRaw, probeSnapshot }),
         });
         const r = await res.json();
         if (r.error) throw new Error(r.error);
-        const absent = Object.entries(r.fidelity).filter(([, v]) => v === 'absent').map(([k]) => k);
-        status.className = 'ok';
-        status.innerHTML = `✓ 已落盘 <b>${r.file}</b><br>traits: ${JSON.stringify(r.traits)}`
-          + (absent.length ? `<br>⚠ 渲染类未采集: ${absent.join(', ')}(profile 部分合成)` : '')
-          + (r.problems.length ? `<br>⚠ 自洽性: ${r.problems.join('; ')}` : '');
+
+        const lines = [];
+        if (r.profile) {
+          const absent = Object.entries(r.profile.fidelity).filter(([, v]) => v === 'absent').map(([k]) => k);
+          lines.push(`✓ profile <b>${r.profile.file}</b> · traits ${JSON.stringify(r.profile.traits)}`);
+          if (absent.length) lines.push(`⚠ 渲染类未采集: ${absent.join(', ')}(profile 部分合成)`);
+          if (r.profile.problems.length) lines.push(`⚠ 自洽性: ${r.profile.problems.join('; ')}`);
+        }
+        if (r.profileError) lines.push(`✗ profile 落盘失败: ${r.profileError}`);
+        if (r.baseline) lines.push(`✓ baseline <b>${r.baseline.file}</b> · targets ${r.baseline.resolved}/${r.baseline.targets} resolved`);
+        if (r.baselineError) lines.push(`✗ baseline 落盘失败: ${r.baselineError}`);
+        status.className = (r.profileError || r.baselineError) ? 'err' : 'ok';
+        status.innerHTML = lines.join('<br>');
       } catch (e) {
         status.className = 'err';
         status.textContent = '✗ ' + e.message;

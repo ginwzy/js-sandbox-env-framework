@@ -2,7 +2,7 @@
  * harness/probe.js —— 结构面探针(L1 diff harness 的"真相源")。
  *
  * 零依赖、自包含、可序列化:同一份代码两侧同源运行 ——
- *   (a) 真机 Chrome:经 harness/page.html 加载,window.__probe__() 回传基线;
+ *   (a) 真机 Chrome:经统一采集页(capture/page.html serve /probe.js)加载,window.__probe__() 回传基线;
  *   (b) mimic realm:被读成文本,realm.run(src + ';JSON.stringify(window.__probe__())') 执行。
  *
  * 只采"结构/形态"(name/length/native toString/own-toString/描述符 flags/原型链/类型标签),
@@ -240,7 +240,7 @@
     };
   }
 
-  // 浏览器侧暴露(harness/page.html 调用并回传);Node 侧读文本后 eval 触发。
+  // 浏览器侧暴露(统一采集页调用并回传);Node 侧读文本后 eval 触发。
   if (typeof window !== 'undefined') window.__probe__ = buildSnapshot;
   if (typeof module !== 'undefined' && module.exports) module.exports = { buildSnapshot: buildSnapshot, PROBE_VERSION: PROBE_VERSION };
 })();
