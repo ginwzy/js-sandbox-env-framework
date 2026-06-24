@@ -343,13 +343,13 @@
       "t1": true,
       "resolved": true,
       "fn": {
-        "name": "",
+        "name": "print",
         "length": 0,
-        "toStringNative": false,
-        "toStringSrc": "function(){window.via.cmd(516)}",
+        "toStringNative": true,
+        "toStringSrc": "",
         "hasOwnToString": false,
-        "hasPrototype": true,
-        "ownNames": "length,name,prototype"
+        "hasPrototype": false,
+        "ownNames": "length,name"
       }
     },
     {
@@ -611,7 +611,16 @@
       "id": "window.getScreenDetails",
       "category": "function",
       "t1": true,
-      "resolved": false
+      "resolved": true,
+      "fn": {
+        "name": "getScreenDetails",
+        "length": 0,
+        "toStringNative": true,
+        "toStringSrc": "",
+        "hasOwnToString": false,
+        "hasPrototype": false,
+        "ownNames": "length,name"
+      }
     },
     {
       "id": "window.queryLocalFonts",
@@ -623,19 +632,46 @@
       "id": "window.showDirectoryPicker",
       "category": "function",
       "t1": true,
-      "resolved": false
+      "resolved": true,
+      "fn": {
+        "name": "showDirectoryPicker",
+        "length": 0,
+        "toStringNative": true,
+        "toStringSrc": "",
+        "hasOwnToString": false,
+        "hasPrototype": false,
+        "ownNames": "length,name"
+      }
     },
     {
       "id": "window.showOpenFilePicker",
       "category": "function",
       "t1": true,
-      "resolved": false
+      "resolved": true,
+      "fn": {
+        "name": "showOpenFilePicker",
+        "length": 0,
+        "toStringNative": true,
+        "toStringSrc": "",
+        "hasOwnToString": false,
+        "hasPrototype": false,
+        "ownNames": "length,name"
+      }
     },
     {
       "id": "window.showSaveFilePicker",
       "category": "function",
       "t1": true,
-      "resolved": false
+      "resolved": true,
+      "fn": {
+        "name": "showSaveFilePicker",
+        "length": 0,
+        "toStringNative": true,
+        "toStringSrc": "",
+        "hasOwnToString": false,
+        "hasPrototype": false,
+        "ownNames": "length,name"
+      }
     },
     {
       "id": "window.webkitRequestFileSystem",
@@ -735,9 +771,31 @@
         "sendBeacon",
         "vibrate",
         "constructor",
+        "storageBuckets",
+        "clipboard",
+        "credentials",
+        "keyboard",
+        "managed",
+        "mediaDevices",
+        "storage",
+        "serviceWorker",
+        "virtualKeyboard",
+        "wakeLock",
+        "deviceMemory",
+        "userAgentData",
+        "contacts",
         "ink",
         "mediaCapabilities",
-        "permissions"
+        "locks",
+        "gpu",
+        "permissions",
+        "clearAppBadge",
+        "getBattery",
+        "getUserMedia",
+        "requestMIDIAccess",
+        "requestMediaKeySystemAccess",
+        "setAppBadge",
+        "webkitGetUserMedia"
       ],
       "symbolKeys": [
         "Symbol(Symbol.toStringTag)"
@@ -1327,6 +1385,253 @@
             "ownNames": "length,name,prototype"
           }
         },
+        "storageBuckets": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get storageBuckets",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "clipboard": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get clipboard",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "credentials": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get credentials",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "keyboard": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get keyboard",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "managed": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get managed",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "mediaDevices": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get mediaDevices",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "storage": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get storage",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "serviceWorker": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get serviceWorker",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "virtualKeyboard": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get virtualKeyboard",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "wakeLock": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get wakeLock",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "deviceMemory": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get deviceMemory",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "userAgentData": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get userAgentData",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "contacts": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get contacts",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
         "ink": {
           "type": "accessor",
           "flags": {
@@ -1365,6 +1670,44 @@
             "set": null
           }
         },
+        "locks": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get locks",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
+        "gpu": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get gpu",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
+          }
+        },
         "permissions": {
           "type": "accessor",
           "flags": {
@@ -1382,6 +1725,132 @@
               "ownNames": "length,name"
             },
             "set": null
+          }
+        },
+        "clearAppBadge": {
+          "type": "data",
+          "flags": {
+            "writable": true,
+            "enumerable": true,
+            "configurable": true
+          },
+          "valueType": "function",
+          "fn": {
+            "name": "clearAppBadge",
+            "length": 0,
+            "toStringNative": true,
+            "toStringSrc": "",
+            "hasOwnToString": false,
+            "hasPrototype": false,
+            "ownNames": "length,name"
+          }
+        },
+        "getBattery": {
+          "type": "data",
+          "flags": {
+            "writable": true,
+            "enumerable": true,
+            "configurable": true
+          },
+          "valueType": "function",
+          "fn": {
+            "name": "getBattery",
+            "length": 0,
+            "toStringNative": true,
+            "toStringSrc": "",
+            "hasOwnToString": false,
+            "hasPrototype": false,
+            "ownNames": "length,name"
+          }
+        },
+        "getUserMedia": {
+          "type": "data",
+          "flags": {
+            "writable": true,
+            "enumerable": true,
+            "configurable": true
+          },
+          "valueType": "function",
+          "fn": {
+            "name": "getUserMedia",
+            "length": 3,
+            "toStringNative": true,
+            "toStringSrc": "",
+            "hasOwnToString": false,
+            "hasPrototype": false,
+            "ownNames": "length,name"
+          }
+        },
+        "requestMIDIAccess": {
+          "type": "data",
+          "flags": {
+            "writable": true,
+            "enumerable": true,
+            "configurable": true
+          },
+          "valueType": "function",
+          "fn": {
+            "name": "requestMIDIAccess",
+            "length": 0,
+            "toStringNative": true,
+            "toStringSrc": "",
+            "hasOwnToString": false,
+            "hasPrototype": false,
+            "ownNames": "length,name"
+          }
+        },
+        "requestMediaKeySystemAccess": {
+          "type": "data",
+          "flags": {
+            "writable": true,
+            "enumerable": true,
+            "configurable": true
+          },
+          "valueType": "function",
+          "fn": {
+            "name": "requestMediaKeySystemAccess",
+            "length": 2,
+            "toStringNative": true,
+            "toStringSrc": "",
+            "hasOwnToString": false,
+            "hasPrototype": false,
+            "ownNames": "length,name"
+          }
+        },
+        "setAppBadge": {
+          "type": "data",
+          "flags": {
+            "writable": true,
+            "enumerable": true,
+            "configurable": true
+          },
+          "valueType": "function",
+          "fn": {
+            "name": "setAppBadge",
+            "length": 0,
+            "toStringNative": true,
+            "toStringSrc": "",
+            "hasOwnToString": false,
+            "hasPrototype": false,
+            "ownNames": "length,name"
+          }
+        },
+        "webkitGetUserMedia": {
+          "type": "data",
+          "flags": {
+            "writable": true,
+            "enumerable": true,
+            "configurable": true
+          },
+          "valueType": "function",
+          "fn": {
+            "name": "webkitGetUserMedia",
+            "length": 3,
+            "toStringNative": true,
+            "toStringSrc": "",
+            "hasOwnToString": false,
+            "hasPrototype": false,
+            "ownNames": "length,name"
           }
         }
       }
@@ -1406,7 +1875,9 @@
         "availLeft",
         "availTop",
         "orientation",
-        "constructor"
+        "constructor",
+        "onchange",
+        "isExtended"
       ],
       "symbolKeys": [
         "Symbol(Symbol.toStringTag)"
@@ -1599,6 +2070,52 @@
             "hasOwnToString": false,
             "hasPrototype": true,
             "ownNames": "length,name,prototype"
+          }
+        },
+        "onchange": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get onchange",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": {
+              "name": "set onchange",
+              "length": 1,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            }
+          }
+        },
+        "isExtended": {
+          "type": "accessor",
+          "flags": {
+            "enumerable": true,
+            "configurable": true
+          },
+          "accessor": {
+            "get": {
+              "name": "get isExtended",
+              "length": 0,
+              "toStringNative": true,
+              "toStringSrc": "",
+              "hasOwnToString": false,
+              "hasPrototype": false,
+              "ownNames": "length,name"
+            },
+            "set": null
           }
         }
       }
@@ -16385,30 +16902,9 @@
         "Navigator.prototype",
         "Object.prototype"
       ],
-      "ownKeys": [
-        "vibrate"
-      ],
+      "ownKeys": [],
       "symbolKeys": [],
-      "keys": {
-        "vibrate": {
-          "type": "data",
-          "flags": {
-            "writable": true,
-            "enumerable": true,
-            "configurable": true
-          },
-          "valueType": "function",
-          "fn": {
-            "name": "bound ",
-            "length": 1,
-            "toStringNative": true,
-            "toStringSrc": "",
-            "hasOwnToString": false,
-            "hasPrototype": false,
-            "ownNames": "length,name"
-          }
-        }
-      }
+      "keys": {}
     },
     {
       "id": "screen",

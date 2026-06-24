@@ -57,15 +57,9 @@ export const RULES = [
     reason: 'jsdom 在 window/对象上以内部 Symbol(ctorRegistrySymbol 等)挂运行时构件,真 Chrome 无 —— webidl2js symbol 泄漏,独立任务。',
     match: (e) => e.bucket === 'EXTRA' && e.field === 'symbolKey',
   },
-  {
-    // 基线缺陷型 divergence(非 mimic 过度注入):非 secure context(局域网 http)采集的基线缺
-    // navigator.userAgentData;mimic 正确注入(Chrome 131+ 必有)→ 表现为 EXTRA。
-    // linux-chrome-v143 已经 localhost(secure)重采、含此键,本规则对 linux 已失配;
-    // 仅 android-webview-v138(仍非 secure 采集,见 yvq.25)还命中。android 重采后即可删。
-    issue: 'yvq.22',
-    reason: '非 secure context 采集的基线缺 navigator.userAgentData;mimic 注入正确(Chrome 必有),属基线缺陷而非过度注入。',
-    match: (e) => e.bucket === 'EXTRA' && e.targetId === 'Navigator.prototype' && e.key === 'userAgentData',
-  },
+  // 注:原 yvq.22 规则(userAgentData EXTRA 兜"非 secure context 基线缺陷")已删 —— 两基线均经
+  // secure context 重采(linux=localhost、android=Via WebView + adb reverse),userAgentData 已在基线中,
+  // 规则全失配。删除以让 gate 重新守住此键(防真过度注入)。
 ];
 
 /**
