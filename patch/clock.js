@@ -3,7 +3,7 @@
  * 对照 sdenv-extend: handle/dateAndRandomHandle.js(录制 / 回放)。
  *
  * 当前为最小可用版:profile.timing 提供固定基准 → Date.now / Math.random 确定化。
- * TODO: 实现 record 模式(跑真实实现并记录序列)+ replay 模式(按序回放)。
+ * record/replay(跑真实实现记录序列 → 按序回放)尚未实现。
  */
 export default {
   name: 'clock',

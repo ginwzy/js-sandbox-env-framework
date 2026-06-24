@@ -65,3 +65,42 @@ Knowledge sinks:
 
 Session close: follow the br "PUSH TO REMOTE" protocol above. Work is not
 complete until the git branch is pushed.
+
+## 注释规约(Comment Discipline)
+
+本项目注释的既有风格是高信息密度、解释"为什么"(根因 / 不变量 / 跨层契约 /
+`[实测]` 证据 / 对照 sdenv 来源),不复述"做什么"。延续它,并遵守以下约束
+——这是对上面 beads/任务规则的**补充**(原规则未字面涉及注释)。
+
+### 1. 不把 beads issue-id 写进 prose 注释
+
+源码注释、JSDoc、测试标题里**禁止**用 issue-id(`yvq.N` / epic 简写 `.NN` /
+评审号 `rNN`)做"为什么"的装饰或指针。理由:issue 是瞬态工件(会关闭 / 重编号),
+源码长寿;读者未必有 br 访问权;issue 关闭后引用即腐烂(本项目曾大面积出现指向
+已 closed issue 的悬空注释)。
+
+正确做法:把 issue 承载的"为什么"**就地写成自解释的散文**——根因、机制、判据。
+需要表达"这是一类单独的、刻意推迟的泄漏/缺口"时,直说"另一类泄漏,单独清理" /
+"已知未尽项",**保留"已知/推迟"信号但不写 issue 号**。任务跟踪留在 br,知识留在
+docs/spec 或 issue notes。
+
+### 2. 例外:issue-id 可作"脚手架移除锚点"(机器可读字段,非 prose)
+
+当一段代码是**临时脚手架**且其存续与某 issue 严格绑定时,允许在**代码字段**里保留
+issue-id 作"何时移除"的锚点。判据:issue-id 是**可执行的删除条件**(非描述性装饰),
+且必有并列的自解释 `reason`。当前唯一合法用例:`harness/whitelist.js` 每条豁免规则的
+`issue:` 字段(配 `reason:` 自解释语义;对应 br open issue 修复后删掉此规则,gate 即
+重新守住)。新增此类脚手架(skip 标记 / 临时豁免)沿用同形态。
+
+### 3. 不写 inline TODO/FIXME;stub 只陈述现状
+
+源码里**禁止** `TODO/FIXME/XXX/HACK` 任务清单——它是 br 之外的平行任务工件,与
+"用 br 跟踪所有任务"冲突且易失同步。未尽功能进 br issue。stub / 未实现单元的注释
+**只陈述事实**:"当前为 stub""X 尚未实现",可描述缺口方向供理解,但不带 `TODO:`
+前缀、不写成待办祈使句。删 TODO 前先确认其待办已在 br 有 issue;若无则先建,
+避免抹掉信号而非转移信号。
+
+### 4. 保留的优秀实践
+
+`[实测]` / `现状[实测]:` 标注经验证的根因;`对照 sdenv …` 标注移植来源;原语 /
+分工说明(如 mask 的 fn/wrap/hook/mixin 边界)。这些是高价值注释,继续写。

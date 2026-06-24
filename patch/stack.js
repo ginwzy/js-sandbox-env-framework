@@ -23,8 +23,8 @@
  * 用 filter(而非遇宿主帧即截断):page 调用 jsdom 派发逻辑(addEventListener/setTimeout 回调,fileName 为裸路径)
  * 再回调 page 时,栈中会"夹"宿主帧 —— 真机里该位置是 C++ native 帧(不显示),故删除所有宿主帧、保留两端页面帧最贴真机。
  *
- * 已知残留(拆 follow-up):① 'prepareStackTrace' 成为 Error 的可见 own property(真机为 undefined 且非 own)是 tell;
- * ② 页面若替换 Error.prepareStackTrace,可拿到含宿主帧的原始 CallSite。本 patch 先把"字符串层 .stack"做干净(yvq.3 验证条件),
+ * 已知残留(单独跟踪,刻意推迟):① 'prepareStackTrace' 成为 Error 的可见 own property(真机为 undefined 且非 own)是 tell;
+ * ② 页面若替换 Error.prepareStackTrace,可拿到含宿主帧的原始 CallSite。本 patch 先把"字符串层 .stack"做干净,
  * 过渡期至少把 prepareStackTrace 自身 native 化,避免 Error.prepareStackTrace.toString() 直接泄漏 mimic 源码。
  */
 export default {

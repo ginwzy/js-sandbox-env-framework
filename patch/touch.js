@@ -1,7 +1,7 @@
 /**
  * patch/touch —— 触摸形态特有(移动端 / 触屏)。
  * 门控:仅 formFactor=mobile 生效。
- * TODO: 补全 TouchEvent / Touch / TouchList 构造器与 ontouch* 事件族。
+ * 当前仅置 window.orientation;TouchEvent / Touch / TouchList 构造器族尚未实现。
  */
 export default {
   name: 'touch',

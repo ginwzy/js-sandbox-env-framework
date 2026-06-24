@@ -1,7 +1,7 @@
 /**
  * trace/monitor —— Proxy 访问监控(get/set/apply/construct 计数与日志)。
  * 取代旧 env/core/ProxyMonitor.js。
- * TODO: 用 mask 友好的方式包裹目标对象,记录访问链,支持对指定 key 触发断点。
+ * 当前 watch() 为 stub(原样返回);完整版用 mask 友好的方式包裹目标对象,记录访问链,支持对指定 key 触发断点。
  */
 export class Monitor {
   constructor() {

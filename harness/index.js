@@ -80,7 +80,7 @@ export function formatReport(report, { verbose = false } = {}) {
   if (missing.length) {
     const byTarget = new Map();
     for (const e of missing) byTarget.set(e.targetId, (byTarget.get(e.targetId) || 0) + 1);
-    lines.push(`MISSING —— jsdom 覆盖缺口(预期内,yvq.6):${missing.length} 项 / ${byTarget.size} target`);
+    lines.push(`MISSING —— jsdom 覆盖缺口(预期内):${missing.length} 项 / ${byTarget.size} target`);
     if (verbose) for (const e of missing) lines.push('  ' + fmtEntry(e));
     else lines.push('  ' + [...byTarget.keys()].slice(0, 12).join(', ') + (byTarget.size > 12 ? ' …' : ''));
     lines.push('');

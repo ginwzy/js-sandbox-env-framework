@@ -1,5 +1,5 @@
 /**
- * patch/protochain —— 校正 jsdom webidl 对象的原型链结构泄漏(yvq.14)。
+ * patch/protochain —— 校正 jsdom webidl 对象的原型链结构泄漏。
  *
  * 根因[实测]:jsdom 核心 DOM 链(Element→Node→EventTarget→Object.prototype)正确挂 window realm 的
  * intrinsic,但 Navigator/Screen/Event 等 webidl 对象的 prototype 顶端挂在 *Node realm 的* 异源

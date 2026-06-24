@@ -24,7 +24,7 @@ export default {
     const stop = window.Object.prototype; // 原型链上界:核心 intrinsic 不碰
     const swept = new Set();
 
-    // 方法 arity 修正表(修复 r52:sweepOwn 调 mask.wrap 不传 len → fn() 跳过 .length 校正 → jsdom 形参个数泄漏)。
+    // 方法 arity 修正表(sweepOwn 调 mask.wrap 须传 len,否则 fn() 跳过 .length 校正 → jsdom 形参个数泄漏)。
     // ground truth = L2 真机结构基线 linux-chrome-v143 的 fn.length。只列 jsdom 与真机 Chrome 不一致、经 diff 实证的方法 ——
     // jsdom 余者 arity 已与真机一致(否则会有成片 fn.length TELL),故精确修正而非全量覆盖。
     // 纪律:scroll/scrollBy/scrollTo 真机即 0(实测 jsdom 亦 0,已对),刻意不入表 —— 避免被 move/resize 族(真机 2)一刀切污染。
@@ -48,7 +48,7 @@ export default {
         const d = Object.getOwnPropertyDescriptor(obj, key);
         if (d) {
           if (typeof d.value === 'function') mask.wrap(obj, key, arityOf(obj, key)); // data 方法:len 仅校正实证 arity 偏差
-          else if (d.get || d.set) mask.wrapAccessor(obj, key);                       // jsdom 原生访问器:get/set 一并 native 化(yvq.12)
+          else if (d.get || d.set) mask.wrapAccessor(obj, key);                       // jsdom 原生访问器:get/set 一并 native 化
         }
       }
     };

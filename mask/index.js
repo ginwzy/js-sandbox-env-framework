@@ -129,7 +129,7 @@ export function createMask(window) {
    * jsdom 原生 accessor(webidl2js 生成)的 name 已是 'get X'/'set X'、length 已对、无 .prototype 残留,
    * 故只需 fn() 换 toString 外观 + reparent + 删 fn 写入的 own toString —— 不传 name/len(基线无 accessor.*.name/length divergence)。
    * get/set 原地改造,描述符的 get/set 引用不变,无需重装描述符。真 intrinsic / 已 masked 的自动跳过。
-   * 消除 accessor.get/set.toStringNative=false 的实现源码泄漏(yvq.12)。注:不动 .prototype(mixin getter 残留属 yvq.11)。
+   * 消除 accessor.get/set.toStringNative=false 的实现源码泄漏。注:不动 .prototype(mixin getter 残留属另一类泄漏,单独清理)。
    */
   function wrapAccessor(target, key) {
     const d = target == null ? undefined : Object.getOwnPropertyDescriptor(target, key);
@@ -173,7 +173,7 @@ export function createMask(window) {
   function mixin(target, getters) {
     const proto = Object.getPrototypeOf(target) || target;
     for (const [key, getValue] of Object.entries(getters)) {
-      const get = dropOwnToString(fn(function () { return adopt(getValue()); }, `get ${key}`)); // 删 fn 写入的 own toString(对齐 wrap/hook),消除 getter own-toString tell(yvq.12)
+      const get = dropOwnToString(fn(function () { return adopt(getValue()); }, `get ${key}`)); // 删 fn 写入的 own toString(对齐 wrap/hook),消除 getter own-toString tell
       const desc = { get, configurable: true, enumerable: true };
       try {
         Object.defineProperty(proto, key, desc);

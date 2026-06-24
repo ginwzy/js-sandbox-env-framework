@@ -33,7 +33,7 @@ const fnT = (id, fn) => ({ id, category: 'function', resolved: true, fn });
   ok('EXTRA own 键(mimic 独有)→ gate FAIL', s.gatePass === false && s.counts.EXTRA >= 1);
 }
 
-// —— Fix 2:访问器半边缺失(基线有 getter、mimic 为 null)→ TELL 阻断,而非被 yvq.6 白名单吞 ——
+// —— Fix 2:访问器半边缺失(基线有 getter、mimic 为 null)→ TELL 阻断,而非被覆盖缺口白名单吞 ——
 {
   const acc = (get) => ({ id: 'Navigator.prototype', category: 'object', kind: 'prototype', resolved: true, tag: '[object Navigator]', protoChain: ['Object.prototype'], ownKeys: ['userAgent'], symbolKeys: [], keys: { userAgent: { type: 'accessor', flags: { enumerable: true, configurable: true }, accessor: { get, set: null } } } });
   const base = complete([acc({ name: 'get userAgent', length: 0, toStringNative: true, hasOwnToString: false, hasPrototype: false })]);
@@ -71,7 +71,7 @@ const fnT = (id, fn) => ({ id, category: 'function', resolved: true, fn });
   const base = complete([fnT('window.fetch', { name: 'fetch', length: 1, toStringNative: true, hasOwnToString: false, hasPrototype: false })]);
   const mim = complete([{ id: 'window.fetch', category: 'function', resolved: false }]);
   const s = summarize(diff(base, mim));
-  ok('MISSING(jsdom 缺)→ gate 不阻断 + 落 yvq.6', s.gatePass === true && s.counts.MISSING === 1);
+  ok('MISSING(jsdom 缺)→ gate 不阻断 + 落覆盖缺口白名单', s.gatePass === true && s.counts.MISSING === 1);
 }
 
 // —— yvq.19:harness host 判定用 probe 的 window.chrome target.resolved(非 UA)——

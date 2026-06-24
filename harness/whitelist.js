@@ -1,11 +1,12 @@
 /**
  * harness/whitelist.js —— 已知可接受 divergence 规则(把已知未修项从 fatal 集合降级)。
  *
- * 每条规则 = 对一个 diff entry 的谓词 → 命中即标 whitelist:issue,不计入 gate 失败。
- * 规则即数据:某 issue 修复后删一行即可让 gate 重新守住它。
+ * 每条规则 = 对一个 diff entry 的谓词 → 命中即标 whitelist,不计入 gate 失败。
+ * 规则即数据:每条规则带一个 issue 锚点(见各规则 issue 字段),指向一项尚未完成的清理任务 ——
+ * 该任务修复后删掉对应规则,即可让 gate 重新守住它。
  *
- * 对照 .13 验收:"T1 已修目标应零 divergence 或仅落白名单"。下列即"仅落白名单"的那部分,
- * 全部映射到尚未完成的子任务(yvq.11 方法残留 .prototype / yvq.12 访问器泄漏 / yvq.6 缺对象 / yvq.2 symbol)。
+ * 验收口径:"T1 已修目标应零 divergence 或仅落白名单"。下列即"仅落白名单"的那部分 ——
+ * 涵盖方法残留 .prototype / jsdom 缺对象覆盖缺口 / webidl 内部 symbol 泄漏等已知未尽项。
  */
 
 /**
@@ -39,7 +40,7 @@ export const RULES = [
       return extra.length === 1 && extra[0] === 'prototype'; // 多出的恰且仅为 prototype
     },
   },
-  // yvq.12(访问器 native 化 + getter own-toString)已修:patch/window sweep 经 mask.wrapAccessor 把 jsdom 原生
+  // 访问器 native 化 + getter own-toString 已修:patch/window sweep 经 mask.wrapAccessor 把 jsdom 原生
   // accessor get/set 一并 native 化,mask.mixin 删自造 getter 的 own toString。原两条白名单规则
   // (accessor.get.toStringNative / accessor.(get|set).hasOwnToString)已无匹配项,删除以让 gate 重新守住。
   {

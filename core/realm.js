@@ -53,7 +53,7 @@ export class Realm {
   /**
    * 执行代码,返回结构化结果。
    * 用 vm.runInContext(而非 window.eval)在 window 的 vm context 内执行:经 filename 把 error.stack 帧来源
-   * 对齐为页面 URL,配合 patch/stack 的 prepareStackTrace 剥离宿主帧,消除执行环境泄漏(yvq.3)。
+   * 对齐为页面 URL,配合 patch/stack 的 prepareStackTrace 剥离宿主帧,消除执行环境泄漏。
    * @param {string} code
    * @param {object} [opts]
    * @param {string} [opts.url]  该脚本在 stack 帧中显示的来源 URL;默认回退到 document URL(location.href)。

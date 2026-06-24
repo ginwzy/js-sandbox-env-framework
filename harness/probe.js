@@ -127,7 +127,7 @@
   // resolver 写成函数(在 target 全局作用域内执行;'window' 两侧皆为全局自指),
   // 缺失则 get() 抛/返 undefined → target 标 resolved:false(整体 MISSING)。
   // category: 'function' 只采单个 fnTell;'object' 采 objectRecord。
-  // t1:true 标记 T1(方法 native 化)已修目标 —— .13 验收的子集。
+  // t1:true 标记 T1(方法 native 化)已修目标 —— harness 验收的子集。
   function F(id, get) { return { id: id, category: 'function', get: get, t1: true }; }
   function O(id, kind, get) { return { id: id, category: 'object', kind: kind, get: get }; }
 
