@@ -42,16 +42,11 @@ export const RULES = [
     reason: 'jsdom 实例对象缺真机标准扩展键:window.chrome(loadTimes/csi/app)、Screen(availLeft/availTop/orientation)—— 覆盖缺口,独立任务。',
     match: (e) => e.bucket === 'MISSING' && (e.targetId === 'window.chrome' || e.targetId === 'Screen.prototype'),
   },
-  {
-    // corrected 基线(linux 经 localhost=secure context 重采)暴露的 secure-context 标准 API,jsdom 全缺。
-    // 旧基线(局域网 http 非 secure)采不到这些、故此前被掩盖 —— 与 userAgentData 同根因。两组:
-    //   - Navigator.prototype:clipboard/credentials/mediaDevices/storage/keyboard/protectedAudience 等 42 项;
-    //   - window 函数:getScreenDetails(Window Management)/queryLocalFonts(Local Font Access)/
-    //     show{Directory,Open,Save}*Picker(File System Access)。
-    issue: 'yvq.24',
-    reason: 'jsdom 缺 secure-context 标准 API(navigator.clipboard/credentials/mediaDevices/...、window File System Access/Window Management/Local Font Access)—— 覆盖缺口,独立任务。',
-    match: (e) => e.bucket === 'MISSING' && (e.targetId === 'Navigator.prototype' || /^window\.(getScreenDetails|queryLocalFonts|show(Directory|Open|Save)\w*Picker)$/.test(e.targetId)),
-  },
+  // 注:原 yvq.24 规则(Navigator.prototype secure-context 42 项 + window File System Access/Window
+  // Management/Local Font Access 函数的 MISSING 兜底)已删 —— patch/navigator + patch/globals 据两基线
+  // host 门控补齐(chrome 全集 ⊃ webview 子集,contacts 移动端专属),其 MISSING 清零。删除以让 gate
+  // 重新守住覆盖(防漏补 / 防过度注入)。补齐后激活的 Navigator.prototype ownKeys.order 属枚举顺序轴,
+  // 与 Node/Event/HTMLDivElement 同根,归该轴单独清理,刻意不在此白名单。
   {
     issue: 'yvq.2',
     reason: 'jsdom 在 window/对象上以内部 Symbol(ctorRegistrySymbol 等)挂运行时构件,真 Chrome 无 —— webidl2js symbol 泄漏,独立任务。',

@@ -11,6 +11,8 @@
 // 缺失 window 方法表:[名, arity, 实现, gate?]。length 取自真机基线,与箭头实参个数解耦(由 fn 校正)。
 // gate(traits)→bool:平台差异方法的门控(缺省=全平台);据真机基线 —— 桌面有、WebView 无的归 desktop。
 const desktopOnly = (t) => t.formFactor === 'desktop';
+// Chrome-vs-WebView 特性差(与桌面/移动无关):WebView 缺的 Chrome 专属 secure-context API 归此。
+const chromeHost = (t) => t.host === 'chrome';
 function methodTable(window, adopt) {
   const W = window;
   // 永久 pending 的 window-realm Promise:真机对正常请求返回 pending 至响应,
@@ -39,6 +41,16 @@ function methodTable(window, adopt) {
     ['webkitResolveLocalFileSystemURL', 2, (url, success, error) => {
       if (typeof error === 'function') W.setTimeout(() => error(new W.Error('SecurityError')), 1);
     }, desktopOnly],
+    // secure-context window 函数(corrected 基线经 secure 重采暴露,jsdom 全缺;length 皆 0)。均需 user
+    // activation,壳取永久 pending(不 reject 触发 unhandledrejection)。
+    //   getScreenDetails        Window Management:两 host 皆有 → 无门控。
+    //   show{Directory,Open,Save}*Picker  File System Access:两 host 皆有 → 无门控。
+    //   queryLocalFonts         Local Font Access:WebView 缺(基线 resolved:false)→ chromeHost 门控。
+    ['getScreenDetails', 0, () => pending()],
+    ['showDirectoryPicker', 0, () => pending()],
+    ['showOpenFilePicker', 0, () => pending()],
+    ['showSaveFilePicker', 0, () => pending()],
+    ['queryLocalFonts', 0, () => pending(), chromeHost],
   ];
 }
 
