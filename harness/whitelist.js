@@ -28,15 +28,32 @@ export const RULES = [
   // 访问器 native 化 + getter own-toString 已修:patch/window sweep 经 mask.wrapAccessor 把 jsdom 原生
   // accessor get/set 一并 native 化,mask.mixin 删自造 getter 的 own toString。原两条白名单规则
   // (accessor.get.toStringNative / accessor.(get|set).hasOwnToString)已无匹配项,删除以让 gate 重新守住。
+  // yvq.6(window 全局函数 fetch/matchMedia/... + Navigator.prototype 标准接口 + 缺失全局对象)已补,
+  // 其 MISSING 项清零;原"bucket==='MISSING' 一刀切"规则拆为下列按 target 精确归属的承接锚点,
+  // 不再留 yvq.6 悬空引用(yvq.6 关闭后即腐烂)。剩余 MISSING 全属其它覆盖缺口。
   {
-    issue: 'yvq.6',
-    reason: 'jsdom 天生不提供这些标准浏览器对象/方法 —— 属覆盖面工作(coverage gap),非 T1 结构回归。',
-    match: (e) => e.bucket === 'MISSING',
+    issue: 'yvq.20',
+    reason: 'jsdom 版本落后,DOM 原型(Document/Element/HTMLElement/EventTarget/Node/Event.prototype)缺较新标准方法 —— 覆盖缺口,独立任务。',
+    match: (e) => e.bucket === 'MISSING'
+      && /^(Document|Element|HTMLElement|EventTarget|Node|Event)\.prototype$/.test(e.targetId),
+  },
+  {
+    issue: 'yvq.21',
+    reason: 'jsdom 实例对象缺真机标准扩展键:window.chrome(loadTimes/csi/app)、Screen(availLeft/availTop/orientation)—— 覆盖缺口,独立任务。',
+    match: (e) => e.bucket === 'MISSING' && (e.targetId === 'window.chrome' || e.targetId === 'Screen.prototype'),
   },
   {
     issue: 'yvq.2',
     reason: 'jsdom 在 window/对象上以内部 Symbol(ctorRegistrySymbol 等)挂运行时构件,真 Chrome 无 —— webidl2js symbol 泄漏,独立任务。',
     match: (e) => e.bucket === 'EXTRA' && e.field === 'symbolKey',
+  },
+  {
+    // 基线缺陷型 divergence(非 mimic 过度注入):真机基线经非 secure context(局域网 http)采集,
+    // navigator.userAgentData 为 undefined 故基线无此键;mimic 正确注入(Chrome 131+ 必有)→ 表现为 EXTRA。
+    // 重采 secure context 基线后基线即含此键,本规则失配,删之即让 gate 守住(防真过度注入)。
+    issue: 'yvq.22',
+    reason: '真机基线非 secure context 采集缺 navigator.userAgentData;mimic 注入正确(Chrome 必有),属基线缺陷而非过度注入。',
+    match: (e) => e.bucket === 'EXTRA' && e.targetId === 'Navigator.prototype' && e.key === 'userAgentData',
   },
 ];
 

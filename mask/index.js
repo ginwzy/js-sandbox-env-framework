@@ -69,7 +69,8 @@ export function createMask(window) {
    * fn() 之后的收尾:reparent 落地(→ window.Function.prototype)则删掉 fn 写入的 own toString,
    * 回落原型链上的 nativeToString —— 真 native 方法/访问器无 own toString(从 Function.prototype 继承)。
    * reparent 未落地(setPrototypeOf 被吞)则保留 own toString 兜底,避免 toString 源码泄漏。
-   * wrap / hook / wrapAccessor / mixin 共用此尾,避免"删 own toString"这一微妙判定被复制后漂移。
+   * wrap / hook / wrapAccessor / mixin 共用此尾;新建独立全局函数(patch/globals 的 window 方法壳)
+   * 亦经此尾,故导出 —— 避免"删 own toString"这一微妙判定被复制后漂移。
    */
   function dropOwnToString(func) {
     if (Object.getPrototypeOf(func) === WFunctionProto) delete func.toString;
@@ -226,5 +227,5 @@ export function createMask(window) {
     }
   }
 
-  return { fn, wrap, wrapAccessor, deproto, hook, tag, iface, mixin, adopt, boot };
+  return { fn, dropOwnToString, wrap, wrapAccessor, deproto, hook, tag, iface, mixin, adopt, boot };
 }
