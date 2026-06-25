@@ -185,8 +185,25 @@ export default {
 
     // ── 特例(刻意不入表):connection 的实例数据来自 profile(非 host/formFactor 门控),故裸 iface 直建;
     //    在 p.connection 缺省时整属性不存在(真机无网络信息时亦然)。
+    //    真机:downlink/effectiveType/rtt/saveData 是 NetworkInformation.prototype 上的只读 IDL attribute、
+    //    onchange 是可写事件处理器 attribute;实例自身无 own 数据键(L2 基线 navigator.connection own keys 为空)。
+    //    原先 create({onchange,...p.connection}) 经 Object.assign 把值挂成实例 own 键 → 5 条 EXTRA tell。
     if (p.connection) {
-      const conn = mask.iface('NetworkInformation').create({ onchange: null, ...p.connection });
+      const ni = mask.iface('NetworkInformation');
+      const c = p.connection;
+      const readonly = {};
+      for (const k of Object.keys(c)) readonly[k] = () => c[k];
+      mask.accessors(ni.proto, readonly);
+      // onchange 须 get+set:get-only 会令页面 strict 模式 `connection.onchange = fn` 抛 TypeError(被 jsdom
+      // 异步路径静默吞,正是可观测性盲态);若改用 data 属性又会被赋值造实例 own 键、破坏空实例不变量。故装
+      // 可写 accessor,setter 存闭包(读回一致),实例始终无 own 键。
+      let onchange = null;
+      Object.defineProperty(ni.proto, 'onchange', {
+        get: mask.native(() => onchange, 'get onchange', 0),
+        set: mask.native((v) => { onchange = v; }, 'set onchange', 1),
+        enumerable: true, configurable: true,
+      });
+      const conn = ni.create(); // eager 建单例,getter 返回同一对象(=== 不变量,同其它 iface 单例)
       accessors.connection = () => conn;
     }
     // ── 特例(刻意不入表):webkit{Temporary,Persistent}Storage 是同一 DeprecatedStorageQuota 类的**两个**

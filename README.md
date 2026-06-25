@@ -56,8 +56,8 @@ npm run smoke
 `traits` 是真实采集的投影(非独立旋钮),`profile.validate()` 守住自洽——构造不出 `host=webview` 却没有 `wv` 的矛盾设备。同一套 patch 由 traits 驱动出不同环境:
 
 ```
-chrome-mac      host=chrome  → window.chrome 存在, touch 跳过
-android-webview host=webview → window.chrome 不存在, chrome 跳过
+chrome-mac      host=chrome  → window.chrome 存在;touch 删桌面误带的 ontouch*
+android-webview host=webview → window.chrome 不存在(chrome 跳过);touch 置 window.orientation
 ```
 
 `realm.describe()` 可内省某环境由哪些 patch 组成 / 跳过。
