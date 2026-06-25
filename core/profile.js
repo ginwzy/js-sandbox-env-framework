@@ -121,6 +121,15 @@ export class Profile {
     if (t.formFactor === 'mobile') want(/Mobile/.test(ua), 'formFactor=mobile 但 UA 不含 Mobile');
     if (t.formFactor === 'desktop') want(!/Mobile/.test(ua), 'formFactor=desktop 但 UA 含 Mobile');
 
+    // location.href 自洽:文档 URL 是 origin/protocol/host 的单一真相源(jsdom 由它派生),须为合法 http(s) 绝对 URL。
+    // 注:referrer 不由文档 URL 派生(jsdom 独立 referrer 选项),profile 暂无 referrer 段 → 不在此交叉校验(无数据则不投机)。
+    const href = this.get('location.href');
+    if (href !== undefined) {
+      let okUrl = false;
+      try { const u = new URL(href); okUrl = u.protocol === 'http:' || u.protocol === 'https:'; } catch { okUrl = false; }
+      want(okUrl, `location.href 非合法 http(s) 绝对 URL: ${JSON.stringify(href)}`);
+    }
+
     return problems;
   }
 }

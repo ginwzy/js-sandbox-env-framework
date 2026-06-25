@@ -11,13 +11,14 @@ import { patches as defaultPatches } from '../patch/index.js';
 import { Detector } from '../trace/detector.js';
 
 export class Realm {
-  constructor({ window, context, profile, mask, traits, trace }) {
+  constructor({ window, context, profile, mask, traits, trace, url }) {
     this.window = window;
     this.context = context; // window 的 vm context,供 run() 用 vm.runInContext 执行
     this.profile = profile;
     this.mask = mask;
     this.traits = traits;
     this.trace = trace || null;
+    this.url = url || null; // 文档当前 URL(jsdom 归一化);run() 的 stack filename 默认回退到它
     this.decisions = [];
   }
 
@@ -26,14 +27,18 @@ export class Realm {
    * @param {string|object|Profile} [opts.profile]
    * @param {boolean} [opts.trace]
    * @param {Array}   [opts.patches]
+   * @param {string}  [opts.url]  运行期文档 URL 覆写(目标站点域);省略则取 profile.location.href,再省略兜底 example.com。
+   *   跑真实目标时必传 —— 文档域正确,cookie 才按域落地、sensor 携带的 origin/referrer 才对。
    * @returns {Promise<Realm>}
    */
-  static async create({ profile, trace = false, patches = defaultPatches } = {}) {
+  static async create({ profile, trace = false, patches = defaultPatches, url } = {}) {
     const prof = await Profile.load(profile);
     const problems = prof.validate();
     if (problems.length) console.warn(`[profile:${prof.name}] 指纹自洽性警告:\n  - ${problems.join('\n  - ')}`);
 
-    const { window, context } = createWindow({ url: prof.get('location.href') });
+    // 文档 URL 单一真相源:运行期 url > profile.location.href > createWindow 的 example.com 兜底。
+    // jsdom 由该 URL 自动派生 location.origin/protocol/host/...,故不在 profile 冗余存这些(防 href↔origin 矛盾)。
+    const { window, context } = createWindow({ url: url || prof.get('location.href') });
     const mask = createMask(window);
     mask.boot();
 
@@ -44,6 +49,7 @@ export class Realm {
       mask,
       traits: prof.traits(),
       trace: trace ? new Detector(window) : null,
+      url: window.location.href, // 归一化后的规范 URL(始终有值:兜底 example.com)
     });
 
     realm.decisions = runPipeline(patches, realm);
@@ -56,11 +62,11 @@ export class Realm {
    * 对齐为页面 URL,配合 patch/stack 的 prepareStackTrace 剥离宿主帧,消除执行环境泄漏。
    * @param {string} code
    * @param {object} [opts]
-   * @param {string} [opts.url]  该脚本在 stack 帧中显示的来源 URL;默认回退到 document URL(location.href)。
+   * @param {string} [opts.url]  该脚本在 stack 帧中显示的来源 URL;默认回退到文档 URL(this.url)。
    *   真机里每段脚本的 stack 帧 URL 是其真实 src,故执行抓取的目标脚本时应传入其原始 URL。
    */
   run(code, { url } = {}) {
-    const filename = url || this.profile.get('location.href');
+    const filename = url || this.url;
     try {
       const value = vm.runInContext(code, this.context, { filename });
       return { ok: true, value, missing: this.trace?.missing() ?? [] };

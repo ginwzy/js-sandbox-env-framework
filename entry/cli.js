@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 命令入口:
- *   mimic run     <script> [--profile name] [--trace]
+ *   mimic run     <script> [--profile name] [--url 目标域] [--trace]
  *   mimic check   <script> [--profile name]
  *   mimic capture [--port 8970]        起统一采集服务,一次访问同源落 profile + 结构基线
  *   mimic diff    [profile] [--baseline name] [--t1] [--verbose] [--json]   结构面 mimic-vs-真机 diff
@@ -39,9 +39,10 @@ function safeJSON(out) {
 }
 
 async function cmdRun([script], flags) {
-  if (!script) return fail('用法: sdenv run <script> [--profile name] [--trace]');
+  if (!script) return fail('用法: sdenv run <script> [--profile name] [--url 目标域] [--trace]');
   const code = fs.readFileSync(script, 'utf-8');
-  const realm = await Realm.create({ profile: flags.profile, trace: !!flags.trace });
+  const url = typeof flags.url === 'string' ? flags.url : undefined;
+  const realm = await Realm.create({ profile: flags.profile, trace: !!flags.trace, url });
   const out = realm.run(code);
   realm.dispose();
   console.log(safeJSON(out));
