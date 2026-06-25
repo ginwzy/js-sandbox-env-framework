@@ -11,7 +11,7 @@ import { patches as defaultPatches } from '../patch/index.js';
 import { Detector } from '../trace/detector.js';
 
 export class Realm {
-  constructor({ window, context, profile, mask, traits, trace, url }) {
+  constructor({ window, context, profile, mask, traits, trace, url, jsdomErrors }) {
     this.window = window;
     this.context = context; // window 的 vm context,供 run() 用 vm.runInContext 执行
     this.profile = profile;
@@ -19,6 +19,7 @@ export class Realm {
     this.traits = traits;
     this.trace = trace || null;
     this.url = url || null; // 文档当前 URL(jsdom 归一化);run() 的 stack filename 默认回退到它
+    this.jsdomErrors = jsdomErrors || []; // 定时器/事件回调里的未捕获异步错误(裸 VirtualConsole 本会静默吞)
     this.decisions = [];
   }
 
@@ -29,20 +30,27 @@ export class Realm {
    * @param {Array}   [opts.patches]
    * @param {string}  [opts.url]  运行期文档 URL 覆写(目标站点域);省略则取 profile.location.href,再省略兜底 example.com。
    *   跑真实目标时必传 —— 文档域正确,cookie 才按域落地、sensor 携带的 origin/referrer 才对。
+   * @param {boolean} [opts.debug] 调试期把 jsdom 异步错误转发到宿主 stderr(默认静音;不改页面可见 error 行为)。
    * @returns {Promise<Realm>}
    */
-  static async create({ profile, trace = false, patches = defaultPatches, url } = {}) {
+  static async create({ profile, trace = false, patches = defaultPatches, url, debug = false } = {}) {
     const prof = await Profile.load(profile);
     const problems = prof.validate();
     if (problems.length) console.warn(`[profile:${prof.name}] 指纹自洽性警告:\n  - ${problems.join('\n  - ')}`);
 
     // 文档 URL 单一真相源:运行期 url > profile.location.href > createWindow 的 example.com 兜底。
     // jsdom 由该 URL 自动派生 location.origin/protocol/host/...,故不在 profile 冗余存这些(防 href↔origin 矛盾)。
-    const { window, context } = createWindow({ url: url || prof.get('location.href') });
+    let realm; // onError 闭包在异步错误时(run 之后)读 realm.trace,故先声明、构造后赋值。
+    const { window, context, errors } = createWindow({
+      url: url || prof.get('location.href'),
+      debug,
+      // trace 开启时把异步 jsdomError 也喂 detector → 计入 missing()(否则只有 run() 的同步错误被捕获)。
+      onError: (e) => realm?.trace?.captureError?.(e?.detail ?? e),
+    });
     const mask = createMask(window);
     mask.boot();
 
-    const realm = new Realm({
+    realm = new Realm({
       window,
       context,
       profile: prof,
@@ -50,6 +58,7 @@ export class Realm {
       traits: prof.traits(),
       trace: trace ? new Detector(window) : null,
       url: window.location.href, // 归一化后的规范 URL(始终有值:兜底 example.com)
+      jsdomErrors: errors,
     });
 
     realm.decisions = runPipeline(patches, realm);
