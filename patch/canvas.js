@@ -29,24 +29,36 @@
  *    scoped-out,留长期。
  */
 
-// 1x1 透明 PNG 占位(toDataURL 返回;非真机渲染,固定值 → 关联 tell,见上"已知未尽项")。
-const PLACEHOLDER_PNG =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+// 1x1 空白占位 data URL,**按请求 type 自洽**(真机[实测]1x1 toDataURL 各格式输出)。非真机渲染像素、固定值
+// → 跨 mimic 实例字节相同(关联 tell),留 payload-keyed replay 长期解。真机据 type 返回对应 MIME 前缀
+// (image/png|jpeg|webp),不支持的 type(gif/bmp/未知)回退 png —— 故 placeholderFor 未命中即取 png。
+const PLACEHOLDER = {
+  'image/png':
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4AWJiYGBgAAAAAP//XRcpzQAAAAZJREFUAwAADwADJDd96QAAAABJRU5ErkJggg==',
+  'image/jpeg':
+    'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZ/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/2wBDAQMDAwQDBAgEBAgQCwkLEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBD/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AJVAA//Z',
+  'image/webp':
+    'data:image/webp;base64,UklGRhACAABXRUJQVlA4WAoAAAAwAAAAAAAAAAAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZBTFBIAgAAAAAAVlA4IBgAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v02aAA=',
+};
+const placeholderFor = (type) => PLACEHOLDER[String(type || '').toLowerCase()] || PLACEHOLDER['image/png'];
 
-// CanvasRenderingContext2D.prototype 高频几何/绘制方法 → arity([规范];no-op 不抛,仅满足"用 canvas 不崩")。
+// CanvasRenderingContext2D.prototype 高频几何/绘制方法 → arity(no-op 不抛,仅满足"用 canvas 不崩")。
+// arity 为真机 Chrome [实测]值,非凭规范手数:WebIDL .length = 重载里**最少必填参数**,故重载方法反直觉
+// —— setTransform()/0(空重载)、roundRect 必填 4(radii 可选)、fillText 必填 3(maxWidth 可选)。
 const NOOP_METHODS = {
-  save: 0, restore: 0, scale: 2, rotate: 1, translate: 2, transform: 6, setTransform: 6, resetTransform: 0,
+  save: 0, restore: 0, scale: 2, rotate: 1, translate: 2, transform: 6, setTransform: 0, resetTransform: 0,
   clearRect: 4, fillRect: 4, strokeRect: 4,
   beginPath: 0, closePath: 0, moveTo: 2, lineTo: 2, bezierCurveTo: 6, quadraticCurveTo: 4,
-  arc: 5, arcTo: 5, ellipse: 7, rect: 4, roundRect: 3,
+  arc: 5, arcTo: 5, ellipse: 7, rect: 4, roundRect: 4,
   fill: 0, stroke: 0, clip: 0,
-  fillText: 2, strokeText: 2,
+  fillText: 3, strokeText: 3,
   setLineDash: 1, drawImage: 3, putImageData: 3,
 };
 
 export default {
   name: 'canvas',
-  after: ['document'],
+  after: [], // 无真实依赖:hook 的 HTMLCanvasElement.prototype 来自 jsdom 底座(无条件存在),mask.hook 幂等守卫
+             // 使与 window patch 的相对顺序无关。原 ['document'] 为悬空依赖(无此 patch),pipeline 静默吞,已删。
   apply({ window, mask }) {
     // 接口壳(真机全局构造器,iface 注册 window.<Name>,new 抛 Illegal,instanceof 成立)。
     const crc2d = mask.iface('CanvasRenderingContext2D');
@@ -59,16 +71,18 @@ export default {
     // isPointInPath 忽略 path 参数,本就 no-op)。
     const path2dProto = mask.adopt(mask.tag({}, 'Path2D'));
     const Path2D = mask.native(function Path2D() {
-      if (!new.target) throw new window.TypeError("Failed to construct 'Path2D': Please use the 'new' operator.");
+      // 完整尾句对齐真机[实测];.stack 首行剥 `Failed to construct 'Path2D': ` 前缀由 patch/stack 复刻。
+      if (!new.target) throw new window.TypeError("Failed to construct 'Path2D': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
     }, 'Path2D', 0);
     Path2D.prototype = path2dProto;
     Object.defineProperty(path2dProto, 'constructor', { value: Path2D, configurable: true, enumerable: false });
+    mask.markCtorProto(path2dProto); // 可构造壳:登记 → finalizeIfaces() 把 constructor 挪到 own 键末位
     Object.defineProperty(window, 'Path2D', { value: Path2D, writable: true, configurable: true, enumerable: false });
     mask.methods(path2dProto, {
       addPath: [1, function addPath() {}], moveTo: [2, function moveTo() {}], lineTo: [2, function lineTo() {}],
       bezierCurveTo: [6, function bezierCurveTo() {}], quadraticCurveTo: [4, function quadraticCurveTo() {}],
       arc: [5, function arc() {}], arcTo: [5, function arcTo() {}], ellipse: [7, function ellipse() {}],
-      rect: [4, function rect() {}], roundRect: [3, function roundRect() {}], closePath: [0, function closePath() {}],
+      rect: [4, function rect() {}], roundRect: [4, function roundRect() {}], closePath: [0, function closePath() {}],
     });
 
     const WUint8Clamped = window.Uint8ClampedArray;
@@ -104,19 +118,38 @@ export default {
       return d;
     };
 
+    // getTransform 返回 DOMMatrix(真机)。realm 暂无 DOMMatrix 全局(属另一类缺口:整个接口缺失,单独补,届时
+    // 此处回放真实变换矩阵且 instanceof DOMMatrix 成立)。此处先返 identity 矩阵的结构占位:tag 为 DOMMatrix、
+    // 字段 a..f/m11..m44/is2D/isIdentity 可读 —— 消除 ctx.getTransform() 调用即崩(=最响 tell);值/原型链不保真。
+    const makeIdentityMatrix = () => mask.adopt(mask.tag({
+      a: 1, b: 0, c: 0, d: 1, e: 0, f: 0,
+      m11: 1, m12: 0, m13: 0, m14: 0, m21: 0, m22: 1, m23: 0, m24: 0,
+      m31: 0, m32: 0, m33: 1, m34: 0, m41: 0, m42: 0, m43: 0, m44: 1,
+      is2D: true, isIdentity: true,
+    }, 'DOMMatrix'));
+
     // CRC2D.prototype 方法集:no-op 几何/绘制 + 有返回值的工厂方法(经 mask.methods native 化)。
     const methods = {};
     for (const [n, len] of Object.entries(NOOP_METHODS)) methods[n] = [len, function () {}];
     Object.assign(methods, {
       measureText: [1, function measureText(text) { return makeMetrics(text); }],
       getImageData: [4, function getImageData(sx, sy, sw, sh) { return makeImageData(sw, sh); }],
-      createImageData: [2, function createImageData(w, h) { return makeImageData(w, h); }],
+      createImageData: [1, function createImageData(w, h) { return makeImageData(w, h); }],
       createLinearGradient: [4, function createLinearGradient() { return gradient.create(); }],
       createRadialGradient: [6, function createRadialGradient() { return gradient.create(); }],
       createConicGradient: [3, function createConicGradient() { return gradient.create(); }],
       isPointInPath: [2, function isPointInPath() { return false; }],
       isPointInStroke: [2, function isPointInStroke() { return false; }],
       getLineDash: [0, function getLineDash() { return mask.adopt([]); }],
+      // 标准 CRC2D 方法,缺失则调用即抛 TypeError(=崩,最响 tell);补非抛壳。getContextAttributes 返回真机[实测]
+      // 默认属性(经典 4 键;Chrome 149 新增 colorType/toneMapping 未给 v148,避免反成"超前键"tell —— 待真机
+      // 148 采集面校准)。getTransform→identity DOMMatrix 占位(见上)。reset no-op;isContextLost 恒 false。
+      getContextAttributes: [0, function getContextAttributes() {
+        return mask.adopt({ alpha: true, colorSpace: 'srgb', desynchronized: false, willReadFrequently: false });
+      }],
+      getTransform: [0, function getTransform() { return makeIdentityMatrix(); }],
+      reset: [0, function reset() {}],
+      isContextLost: [0, function isContextLost() { return false; }],
     });
     mask.methods(crc2d.proto, methods);
 
@@ -140,7 +173,10 @@ export default {
       return orig.call(this, type, attrs);
     });
 
-    // toDataURL:jsdom 无渲染返回 null(真机绝不为 null)→ 覆盖为占位 PNG 串(值不保真,见"已知未尽项")。
-    mask.hook(window.HTMLCanvasElement.prototype, 'toDataURL', () => function toDataURL() { return PLACEHOLDER_PNG; });
+    // toDataURL:jsdom 无渲染返回 null(真机绝不为 null)→ 覆盖为按请求 type 自洽的占位串。真机据 type 返回对应
+    // MIME 前缀(webp/jpeg/png);忽略 type 恒返 image/png 会让 `toDataURL('image/webp').startsWith('data:image/webp')`
+    // 这类**特性探测**在自称支持 webp 的 Chrome 上为 false —— 自洽契约违反、纯字符串即穿,故复刻 type→前缀映射。
+    // 占位**字节**仍为 1x1 空白(非真机渲染像素),值保真留 payload-keyed replay 长期解。
+    mask.hook(window.HTMLCanvasElement.prototype, 'toDataURL', () => function toDataURL(type) { return placeholderFor(type); });
   },
 };

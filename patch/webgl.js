@@ -49,7 +49,7 @@ const CONTEXT_ATTRS = {
 
 export default {
   name: 'webgl',
-  after: ['document'],
+  after: [], // 同 canvas:hook 的 HTMLCanvasElement.prototype 来自 jsdom 底座,无真实依赖。原 ['document'] 悬空,已删。
   apply({ window, profile, mask }) {
     const wg = profile.section('webgl');
     if (!wg || !wg.parameters) return; // 未采 GPU → 不伪造,getContext 维持 null(同 jsdom 原样)

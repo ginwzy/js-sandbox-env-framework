@@ -37,7 +37,11 @@ export default {
     const prepareStackTrace = mask.fn(function prepareStackTrace(error, frames) {
       const name = (error && error.name) || 'Error';
       const message = error && error.message;
-      const head = message ? `${name}: ${message}` : name;
+      // 构造器 binding 错误:真机[实测].message 带 `Failed to construct '<Name>': ` 前缀,但 .stack 首行**剥**该前缀
+      // (V8 在 throw 时用短串建栈、.message 另设为长串 → message≠stack-head)。JS 层 throw new TypeError(s) 无法
+      // 天然制造该分叉(stack 首行恒 ==`name: ${s}`),故在重建 .stack 时剥前缀复刻 —— 只命中构造器错,不误伤普通错。
+      const core = message ? message.replace(/^Failed to construct '[^']*': /, '') : message;
+      const head = core ? `${name}: ${core}` : name;
       const lines = [];
       for (let i = 0; i < frames.length; i++) {
         const frame = frames[i];

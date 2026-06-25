@@ -1,6 +1,7 @@
 /**
  * patch 注册表 —— pipeline 的输入。新增特性补丁在此登记即可。
- * 顺序无关:实际执行顺序由各 patch 的 `after` 依赖拓扑决定。
+ * 执行顺序:声明了 `after` 依赖的按拓扑排在其依赖之后;无依赖的保持本数组登记序(pipeline 按数组序 visit)。
+ * 故登记序仍是默认序,只有真实 `after` 依赖会覆盖它 —— 不存在的依赖名会被 pipeline 告警(非静默吞)。
  */
 import windowPatch from './window.js';
 import globals from './globals.js';

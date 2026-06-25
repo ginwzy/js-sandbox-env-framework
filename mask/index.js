@@ -227,6 +227,22 @@ export function createMask(window) {
    * 在真实浏览器是全局可见的,故注册到 window。
    * @returns {{ ctor: Function, proto: object, create: (props?:object)=>object }}
    */
+  // 接口原型登记表:finalizeIfaces() 遍历它把 constructor own 键移到**末位**。根因:JS own 字符串键枚举=插入序,
+  // iface/可构造壳建原型时先 defineProperty('constructor') 再装方法 → constructor 恒为首键;真机 WebIDL 接口原型
+  // constructor 恒在**末位**(getOwnPropertyNames(proto)[0]==='constructor' 即穿)。delete+重定义把它挪到插入序尾部。
+  // 注:此处只纠 constructor 位置(最廉价 tell);非 constructor 键仍为插入序(真机为 Blink IDL 序)、且缺成员
+  // 未补 → 完整键序保真与补全成员纠缠,留长期。可构造壳(audio ctorIface / canvas Path2D)经 markCtorProto 登记。
+  const ctorProtos = new Set();
+  function markCtorProto(proto) { if (proto && typeof proto === 'object') ctorProtos.add(proto); return proto; }
+  function finalizeIfaces() {
+    for (const proto of ctorProtos) {
+      const d = Object.getOwnPropertyDescriptor(proto, 'constructor');
+      if (!d || !d.configurable) continue;
+      delete proto.constructor;
+      Object.defineProperty(proto, 'constructor', d); // 重定义 → 落到 own 字符串键插入序末位(Symbol 键恒在其后,不影响)
+    }
+  }
+
   const ifaceRegistry = new Map();
   function iface(name, props = {}) {
     // 重名守卫:两个 patch 抢注同名 window 接口类会令后者静默覆盖前者(且先注册的实例 proto 身份分裂)。
@@ -237,11 +253,14 @@ export function createMask(window) {
     }
     // 抛 window-realm TypeError:页面 `catch(e){ e instanceof TypeError }`(检测器试探非法构造)须为 true —— 同
     // adopt 的跨 realm 身份契约,Node realm 的 TypeError 会令该 instanceof 为 false 而成 tell。
-    const ctor = fn(function () { throw new window.TypeError('Illegal constructor'); }, name);
+    // message 须带 `Failed to construct '<Name>': ` 前缀(真机[实测]Blink binding 形态;裸 'Illegal constructor'
+    // 是 message tell,逐字比对即穿)。注:真机 .stack 首行**剥**该前缀 —— 由 patch/stack 重建 .stack 时复刻该分叉。
+    const ctor = fn(function () { throw new window.TypeError(`Failed to construct '${name}': Illegal constructor`); }, name);
     const proto = adopt(tag({ ...props }, name)); // proto 链落在 window.Object.prototype
     ctor.prototype = proto;
     Object.defineProperty(proto, 'constructor', { value: ctor, configurable: true, enumerable: false });
     Object.defineProperty(window, name, { value: ctor, writable: true, configurable: true, enumerable: false });
+    markCtorProto(proto); // 登记 → finalizeIfaces() 把 constructor 挪到 own 键末位(对齐真机 WebIDL)
     /** 基于该接口原型创建一个 window 身份的实例。 */
     const create = (extra = {}) => Object.assign(Object.create(proto), extra);
     const reg = { ctor, proto, create };
@@ -325,6 +344,6 @@ export function createMask(window) {
   return {
     fn, native, dropOwnToString, wrap, wrapAccessor, deproto, hook, tag,
     iface, singleton, method, methods, accessor, accessors, mixin, adopt, boot,
-    promise, pending, reorderOwnKeys,
+    promise, pending, reorderOwnKeys, markCtorProto, finalizeIfaces,
   };
 }
