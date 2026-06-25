@@ -7,6 +7,7 @@
  *   realm.dispose();
  */
 export { Realm } from '../core/realm.js';
+export { Session } from '../core/session.js';
 export { Profile } from '../core/profile.js';
 export { createMask } from '../mask/index.js';
 export { patches } from '../patch/index.js';
