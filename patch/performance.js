@@ -132,21 +132,17 @@ export default {
       getEntries: [0, () => adopt([])], getEntriesByType: [1, () => adopt([])], getEntriesByName: [2, () => adopt([])],
     });
     if (typeof W.PerformanceObserver !== 'function') {
-      const Observer = native(function PerformanceObserver(cb) {
-        if (!new.target) throw new W.TypeError("Failed to construct 'PerformanceObserver': Please use the 'new' operator.");
-        if (typeof cb !== 'function') throw new W.TypeError("Failed to construct 'PerformanceObserver': parameter 1 is not of type 'PerformanceObserverCallback'.");
-      }, 'PerformanceObserver', 1);
-      const oproto = mask.tag(adopt({}), 'PerformanceObserver');
-      methods(oproto, { observe: [1, () => undefined], disconnect: [0, () => undefined], takeRecords: [0, () => adopt([])] });
-      Object.defineProperty(oproto, 'constructor', { value: Observer, writable: true, enumerable: false, configurable: true });
-      Observer.prototype = oproto;
+      const po = mask.ctorIface('PerformanceObserver', 1, (self, args) => {
+        if (typeof args[0] !== 'function') throw new W.TypeError("Failed to construct 'PerformanceObserver': parameter 1 is not of type 'PerformanceObserverCallback'.");
+      }, {
+        methods: { observe: [1, () => undefined], disconnect: [0, () => undefined], takeRecords: [0, () => adopt([])] },
+      });
       // 静态 supportedEntryTypes:Akamai 读以判 PerformanceObserver 真伪。
-      Object.defineProperty(Observer, 'supportedEntryTypes', {
+      Object.defineProperty(po.ctor, 'supportedEntryTypes', {
         get: native(() => adopt(['element', 'event', 'first-input', 'largest-contentful-paint', 'layout-shift',
           'longtask', 'mark', 'measure', 'navigation', 'paint', 'resource']), 'get supportedEntryTypes'),
         enumerable: true, configurable: true,
       });
-      W.PerformanceObserver = Observer;
     }
   },
 };

@@ -18,17 +18,17 @@
 export default {
   name: 'protochain',
   after: ['navigator'],
-  apply({ window }) {
+  apply({ window, mask }) {
     const OP = window.Object.prototype;
-    const ETP = window.EventTarget.prototype;
 
     // ① 顶端异源 Object.prototype → window.Object.prototype(检测器 getPrototypeOf===Object.prototype 才成立)
     Object.setPrototypeOf(window.Navigator.prototype, OP);
     Object.setPrototypeOf(window.Event.prototype, OP);
 
-    // ② 缺 EventTarget 层 → 插入(真机 Screen / NetworkInformation 继承 EventTarget;ETP 顶端已是 window.Object.prototype)
-    Object.setPrototypeOf(window.Screen.prototype, ETP);
+    // ② 缺 EventTarget 层 → 插入(真机 Screen / NetworkInformation 继承 EventTarget;ETP 顶端已是 window.Object.prototype)。
+    //    经 mask.eventTargetProto 顺带登记 brandless —— 实例无 jsdom slot,方法调用 brand-check 由 patch/eventtarget short-circuit。
+    mask.eventTargetProto(window.Screen.prototype);
     const conn = window.navigator.connection;
-    if (conn) Object.setPrototypeOf(Object.getPrototypeOf(conn), ETP); // NetworkInformation.prototype
+    if (conn) mask.eventTargetProto(Object.getPrototypeOf(conn)); // NetworkInformation.prototype
   },
 };

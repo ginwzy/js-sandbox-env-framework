@@ -60,20 +60,13 @@ export default {
     // Path2D:真机**可构造**(new Path2D() / new Path2D(pathOrSvg)),非 Illegal —— 缺失则 `new Path2D()` 抛
     // ReferenceError、`ctx.fill(path)` 崩(违反"不崩")。建可构造壳 + 几何方法 no-op(ctx.fill/stroke/
     // isPointInPath 忽略 path 参数,本就 no-op)。
-    const path2dProto = mask.adopt(mask.tag({}, 'Path2D'));
-    const Path2D = mask.native(function Path2D() {
-      // 完整尾句对齐真机[实测](契约与前缀剥离见 mask.iface)。
-      if (!new.target) throw new window.TypeError("Failed to construct 'Path2D': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
-    }, 'Path2D', 0);
-    Path2D.prototype = path2dProto;
-    Object.defineProperty(path2dProto, 'constructor', { value: Path2D, configurable: true, enumerable: false });
-    mask.markCtorProto(path2dProto); // 可构造壳:登记 → finalizeIfaces() 把 constructor 挪到 own 键末位
-    Object.defineProperty(window, 'Path2D', { value: Path2D, writable: true, configurable: true, enumerable: false });
-    mask.methods(path2dProto, {
-      addPath: [1, function addPath() {}], moveTo: [2, function moveTo() {}], lineTo: [2, function lineTo() {}],
-      bezierCurveTo: [6, function bezierCurveTo() {}], quadraticCurveTo: [4, function quadraticCurveTo() {}],
-      arc: [5, function arc() {}], arcTo: [5, function arcTo() {}], ellipse: [7, function ellipse() {}],
-      rect: [4, function rect() {}], roundRect: [4, function roundRect() {}], closePath: [0, function closePath() {}],
+    mask.ctorIface('Path2D', 0, null, {
+      methods: {
+        addPath: [1, function addPath() {}], moveTo: [2, function moveTo() {}], lineTo: [2, function lineTo() {}],
+        bezierCurveTo: [6, function bezierCurveTo() {}], quadraticCurveTo: [4, function quadraticCurveTo() {}],
+        arc: [5, function arc() {}], arcTo: [5, function arcTo() {}], ellipse: [7, function ellipse() {}],
+        rect: [4, function rect() {}], roundRect: [4, function roundRect() {}], closePath: [0, function closePath() {}],
+      },
     });
 
     const WUint8Clamped = window.Uint8ClampedArray;
@@ -144,12 +137,9 @@ export default {
     });
     mask.methods(crc2d.proto, methods);
 
-    // per-instance canvas accessor:箭头 getter 读不了 this,自建读 this 的 native getter(对照 webgl)。
+    // per-instance canvas accessor:读 this 取关联 <canvas>(mask.instAccessor 的实例态 getter)。
     const ctxCanvas = new WeakMap(); // 2d context 实例 → 关联 <canvas>
-    Object.defineProperty(crc2d.proto, 'canvas', {
-      get: mask.native(function canvas() { return ctxCanvas.get(this) || null; }, 'get canvas'),
-      enumerable: true, configurable: true,
-    });
+    mask.instAccessor(crc2d.proto, 'canvas', function () { return ctxCanvas.get(this) || null; });
 
     // getContext 接管:同一 canvas 的 '2d' 返回同一 context(真机单例);非 '2d' delegate 往下(2d/webgl/webgl2
     // 各 patch hook 同一 getContext、拓扑序未定,故两边都须 delegate 未知 type → 组合后三者皆可 resolve)。

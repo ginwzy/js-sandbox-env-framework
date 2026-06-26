@@ -65,31 +65,9 @@ export default {
       window[name] = native(impl, name, len);
     }
 
-    // 装配 helper:方法(data,w+e+c)/ 访问器(get native,length0,set null)。收敛进 mask 后此处仅
-    // 取别名 —— 局部名保留是为下面 makeCtor/单例壳的调用点可读(defineMethods(proto,…) 比 mask.methods 更近场景)。
-    const defineMethods = mask.methods;
-    const defineAccessors = mask.accessors;
-
-    // 可 new 的接口类壳(真机非 illegal constructor,多继承 EventTarget)。
-    // 注:这些不在 harness probe 目标内(盲区),形态靠运行时自测,无真机基线对照。
-    const makeCtor = (name, len, { parent = ET, methods = {}, accessors = {}, init, statics = {} } = {}) => {
-      const Ctor = native(function () {
-        if (!new.target) {
-          throw new W.TypeError(`Failed to construct '${name}': Please use the 'new' operator, `
-            + 'this DOM object constructor cannot be called as a function.');
-        }
-        if (typeof init === 'function') init(this);
-      }, name, len);
-      const proto = mask.tag(mask.adopt({}), name);
-      if (parent) Object.setPrototypeOf(proto, parent);
-      defineMethods(proto, methods);
-      defineAccessors(proto, accessors);
-      Object.defineProperty(proto, 'constructor', { value: Ctor, writable: true, enumerable: false, configurable: true });
-      Ctor.prototype = proto;
-      defineMethods(Ctor, statics);
-      W[name] = Ctor;
-      return Ctor;
-    };
+    // 可 new 的接口类壳:mask.ctorIface 的薄封装,默认 parent=EventTarget.prototype(globals 这些接口真机
+    // 多继承 EventTarget)。注:这些不在 harness probe 目标内(盲区),形态靠运行时自测,无真机基线对照。
+    const makeCtor = (name, len, opts = {}) => mask.ctorIface(name, len, opts.init, { parent: ET, ...opts });
 
     // illegal-constructor 单例:类不可 new,但有一个全局实例(indexedDB / visualViewport)。取别名与 makeCtor 平行。
     const makeSingleton = mask.singleton;
@@ -166,8 +144,8 @@ export default {
     // matchMedia + MediaQueryList:真机 MediaQueryList.prototype → EventTarget.prototype(可 addEventListener)。
     if (typeof window.matchMedia !== 'function') {
       const mql = mask.iface('MediaQueryList');
-      // iface 默认把 proto 顶到 window.Object.prototype;插入 EventTarget 层对齐真机原型链。
-      try { Object.setPrototypeOf(mql.proto, window.EventTarget.prototype); } catch { /* noop */ }
+      // iface 默认把 proto 顶到 window.Object.prototype;插入 EventTarget 层对齐真机原型链(顺带登记 brandless)。
+      try { mask.eventTargetProto(mql.proto); } catch { /* noop */ }
 
       const coarse = traits.formFactor === 'mobile';
       const matchMedia = (query) => {

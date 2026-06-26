@@ -78,11 +78,12 @@ export default {
         getExtension: [1, function getExtension(name) { return name === 'WEBGL_debug_renderer_info' ? debugExt : null; }],
         getContextAttributes: [0, function getContextAttributes() { return mask.adopt({ ...CONTEXT_ATTRS }); }],
       });
-      // per-instance accessor:箭头 getter 不读 this、装不了"按实例取关联 canvas",故自建读 this 的 native getter。
-      const define = (name, get) => Object.defineProperty(proto, name, { get: mask.native(get, `get ${name}`), enumerable: true, configurable: true });
-      define('canvas', function () { return ctxCanvas.get(this) || null; });
-      define('drawingBufferWidth', function () { const c = ctxCanvas.get(this); return c ? c.width : 0; });
-      define('drawingBufferHeight', function () { const c = ctxCanvas.get(this); return c ? c.height : 0; });
+      // per-instance accessor:读 this 取关联 <canvas>(mask.instAccessor 的实例态 getter)。
+      mask.instAccessors(proto, {
+        canvas: function () { return ctxCanvas.get(this) || null; },
+        drawingBufferWidth: function () { const c = ctxCanvas.get(this); return c ? c.width : 0; },
+        drawingBufferHeight: function () { const c = ctxCanvas.get(this); return c ? c.height : 0; },
+      });
     };
 
     const webgl1 = mask.iface('WebGLRenderingContext');

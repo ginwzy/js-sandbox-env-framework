@@ -189,15 +189,7 @@ export default {
       const readonly = {};
       for (const k of Object.keys(c)) readonly[k] = () => c[k];
       mask.accessors(ni.proto, readonly);
-      // onchange 须 get+set:get-only 会令页面 strict 模式 `connection.onchange = fn` 抛 TypeError(被 jsdom
-      // 异步路径静默吞,正是可观测性盲态);若改用 data 属性又会被赋值造实例 own 键、破坏空实例不变量。故装
-      // 可写 accessor,setter 存闭包(读回一致),实例始终无 own 键。
-      let onchange = null;
-      Object.defineProperty(ni.proto, 'onchange', {
-        get: mask.native(() => onchange, 'get onchange', 0),
-        set: mask.native((v) => { onchange = v; }, 'set onchange', 1),
-        enumerable: true, configurable: true,
-      });
+      mask.eventHandler(ni.proto, 'onchange'); // 可写 on* 访问器(理由见 mask.eventHandler);实例始终无 own 键
       const conn = ni.create(); // eager 建单例,getter 返回同一对象(=== 不变量,同其它 iface 单例)
       accessors.connection = () => conn;
     }

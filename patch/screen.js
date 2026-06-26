@@ -19,17 +19,12 @@ export default {
     // type/angle 为原型只读 accessor(读 profile),onchange 可写 accessor(get-only 会令 strict 赋值抛),
     // lock/unlock 为方法壳。eager create → getter 恒返同一实例(=== 不变量)。
     const so = mask.iface('ScreenOrientation');
-    Object.setPrototypeOf(so.proto, window.EventTarget.prototype); // 真机:ScreenOrientation extends EventTarget
+    mask.eventTargetProto(so.proto); // 真机:ScreenOrientation extends EventTarget(顺带登记 brandless)
     mask.accessors(so.proto, {
       type: () => o.type || 'landscape-primary',
       angle: () => o.angle ?? 0,
     });
-    let onchange = null;
-    Object.defineProperty(so.proto, 'onchange', {
-      get: mask.native(() => onchange, 'get onchange', 0),
-      set: mask.native((v) => { onchange = v; }, 'set onchange', 1),
-      enumerable: true, configurable: true,
-    });
+    mask.eventHandler(so.proto, 'onchange'); // 可写 on* 访问器(理由见 mask.eventHandler)
     mask.methods(so.proto, { lock: [1, () => mask.adopt(window.Promise.resolve())], unlock: [0, () => undefined] });
     const orientation = so.create();
 

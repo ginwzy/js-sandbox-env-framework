@@ -27,25 +27,6 @@ export default {
   apply({ window, mask }) {
     const WFloat32 = window.Float32Array;
 
-    // 可构造接口壳:区别 mask.iface(new 抛 Illegal),真机 context/buffer 可 new。init(self,args) 写私有状态。
-    const ctorIface = (name, len, init) => {
-      const proto = mask.adopt(mask.tag({}, name));
-      const ctor = mask.native(function (...args) {
-        // window-realm TypeError + 完整尾句对齐真机[实测](契约与前缀剥离见 mask.iface)。
-        if (!new.target) throw new window.TypeError(`Failed to construct '${name}': Please use the 'new' operator, this DOM object constructor cannot be called as a function.`);
-        if (init) init(this, args);
-      }, name, len);
-      ctor.prototype = proto;
-      Object.defineProperty(proto, 'constructor', { value: ctor, configurable: true, enumerable: false });
-      mask.markCtorProto(proto); // 可构造壳:登记 → finalizeIfaces() 把 constructor 挪到 own 键末位
-      Object.defineProperty(window, name, { value: ctor, writable: true, configurable: true, enumerable: false });
-      return { ctor, proto, create: (extra = {}) => Object.assign(Object.create(proto), extra) };
-    };
-
-    // 读 this 的 native getter(箭头读不了 this,对照 webgl 的 canvas accessor)。
-    const instGetter = (proto, name, get) =>
-      Object.defineProperty(proto, name, { get: mask.native(get, `get ${name}`), enumerable: true, configurable: true });
-
     // 简易 EventTarget:装 context proto 自身并自维护 listener map —— 不继承 jsdom EventTarget.prototype,
     // 后者 webidl brand-check 对非 jsdom 实例抛 Illegal invocation(原型链深度有差,见头注"已知未尽项")。
     const listeners = new WeakMap();
@@ -80,7 +61,7 @@ export default {
     });
     // automationRate 真机[实测]'a-rate'(prototype accessor);缺则读 undefined 是 tell。多数 param 默认 a-rate,
     // 此处统一返 'a-rate'(per-param k-rate 默认的细分留长期)。
-    instGetter(audioParam.proto, 'automationRate', function automationRate() { return 'a-rate'; });
+    mask.instAccessor(audioParam.proto, 'automationRate', function () { return 'a-rate'; });
     // value 为实例可写 own(真机 prototype accessor,见"已知未尽项");default/min/max 占位。
     const makeParam = (defaultValue, minValue, maxValue) =>
       audioParam.create({ value: defaultValue, defaultValue, minValue, maxValue });
@@ -98,12 +79,14 @@ export default {
       disconnect: [0, function disconnect() {}],
     });
     const topo = (self) => topoByProto.get(Object.getPrototypeOf(self)) || {};
-    instGetter(audioNode.proto, 'numberOfInputs', function numberOfInputs() { return topo(this).ni ?? 0; });
-    instGetter(audioNode.proto, 'numberOfOutputs', function numberOfOutputs() { return topo(this).no ?? 0; });
-    instGetter(audioNode.proto, 'channelCount', function channelCount() { return topo(this).cc ?? 2; });
-    instGetter(audioNode.proto, 'channelCountMode', function channelCountMode() { return topo(this).ccm || 'max'; });
-    instGetter(audioNode.proto, 'channelInterpretation', function channelInterpretation() { return topo(this).ci || 'speakers'; });
-    instGetter(audioNode.proto, 'context', function context() { return nodeCtx.get(this) || null; });
+    mask.instAccessors(audioNode.proto, {
+      numberOfInputs: function () { return topo(this).ni ?? 0; },
+      numberOfOutputs: function () { return topo(this).no ?? 0; },
+      channelCount: function () { return topo(this).cc ?? 2; },
+      channelCountMode: function () { return topo(this).ccm || 'max'; },
+      channelInterpretation: function () { return topo(this).ci || 'speakers'; },
+      context: function () { return nodeCtx.get(this) || null; },
+    });
     const nodeIface = (name, nodeTopo, methods) => {
       const n = mask.iface(name);
       Object.setPrototypeOf(n.proto, audioNode.proto); // extends AudioNode
@@ -129,7 +112,7 @@ export default {
 
     // ── AudioBuffer(可构造):getChannelData → 全 0 占位 Float32Array;length/sampleRate/... 读私有状态 ──
     const bufState = new WeakMap();
-    const audioBuffer = ctorIface('AudioBuffer', 1, (self, [opts]) => {
+    const audioBuffer = mask.ctorIface('AudioBuffer', 1, (self, [opts]) => {
       const o = opts || {};
       bufState.set(self, { numCh: o.numberOfChannels || 1, length: o.length || 0, sampleRate: o.sampleRate || 44100 });
     });
@@ -143,11 +126,11 @@ export default {
       copyFromChannel: [3, function copyFromChannel() {}],
       copyToChannel: [3, function copyToChannel() {}],
     });
-    instGetter(audioBuffer.proto, 'length', function length() { return (bufState.get(this) || {}).length || 0; });
-    instGetter(audioBuffer.proto, 'sampleRate', function sampleRate() { return (bufState.get(this) || {}).sampleRate || 0; });
-    instGetter(audioBuffer.proto, 'numberOfChannels', function numberOfChannels() { return (bufState.get(this) || {}).numCh || 0; });
-    instGetter(audioBuffer.proto, 'duration', function duration() {
-      const s = bufState.get(this) || {}; return s.sampleRate ? (s.length || 0) / s.sampleRate : 0;
+    mask.instAccessors(audioBuffer.proto, {
+      length: function () { return (bufState.get(this) || {}).length || 0; },
+      sampleRate: function () { return (bufState.get(this) || {}).sampleRate || 0; },
+      numberOfChannels: function () { return (bufState.get(this) || {}).numCh || 0; },
+      duration: function () { const s = bufState.get(this) || {}; return s.sampleRate ? (s.length || 0) / s.sampleRate : 0; },
     });
 
     // ── context 工厂方法(真机住 BaseAudioContext.prototype;此处装各 context proto,跳过中间层) ──
@@ -169,18 +152,20 @@ export default {
         createBuffer: [3, function createBuffer(numCh, length, sampleRate) { return makeBuffer(numCh, length, sampleRate); }],
         decodeAudioData: [1, function decodeAudioData() { return mask.promise(makeBuffer(1, 0, 44100)); }],
       });
-      instGetter(proto, 'destination', function destination() {
-        let d = ctxDest.get(this); if (!d) { d = mkNode(destinationNode, this, { maxChannelCount: 2 }); ctxDest.set(this, d); } return d;
+      mask.instAccessors(proto, {
+        destination: function () {
+          let d = ctxDest.get(this); if (!d) { d = mkNode(destinationNode, this, { maxChannelCount: 2 }); ctxDest.set(this, d); } return d;
+        },
+        sampleRate: function () { return (stateOf(this) || {}).sampleRate || 44100; },
+        currentTime: function () { return 0; },
+        listener: function () { return null; },
       });
-      instGetter(proto, 'sampleRate', function sampleRate() { return (stateOf(this) || {}).sampleRate || 44100; });
-      instGetter(proto, 'currentTime', function currentTime() { return 0; });
-      instGetter(proto, 'listener', function listener() { return null; });
       installEventTarget(proto); // addEventListener('complete')/oncomplete 路径(FingerprintJS2 主路径)
     };
 
     // ── OfflineAudioContext(可构造):(numberOfChannels, length, sampleRate) 或 (options);startRendering→Promise<AudioBuffer> ──
     const offState = new WeakMap();
-    const offline = ctorIface('OfflineAudioContext', 1, (self, args) => {
+    const offline = mask.ctorIface('OfflineAudioContext', 1, (self, args) => {
       let numCh = 1, length = 0, sampleRate = 44100;
       if (args.length === 1 && args[0] && typeof args[0] === 'object') {
         ({ numberOfChannels: numCh = 1, length = 0, sampleRate = 44100 } = args[0]);
@@ -206,13 +191,15 @@ export default {
       suspend: [1, function suspend() { return mask.promise(); }],
       resume: [0, function resume() { return mask.promise(); }],
     });
-    instGetter(offline.proto, 'length', function length() { return (offState.get(this) || {}).length || 0; });
-    // 真机[对照 Blink]:渲染前 'suspended',startRendering 完成后单向转 'closed'(不可逆,offline 只渲一次)。
-    instGetter(offline.proto, 'state', function state() { return (offState.get(this) || {}).rendered ? 'closed' : 'suspended'; });
+    mask.instAccessors(offline.proto, {
+      length: function () { return (offState.get(this) || {}).length || 0; },
+      // 真机[对照 Blink]:渲染前 'suspended',startRendering 完成后单向转 'closed'(不可逆,offline 只渲一次)。
+      state: function () { return (offState.get(this) || {}).rendered ? 'closed' : 'suspended'; },
+    });
 
     // ── AudioContext(可构造,实时):close/suspend/resume → Promise ──
     const ctxState = new WeakMap();
-    const audioCtx = ctorIface('AudioContext', 0, (self, [opts]) => {
+    const audioCtx = mask.ctorIface('AudioContext', 0, (self, [opts]) => {
       ctxState.set(self, { sampleRate: (opts && opts.sampleRate) || 44100 });
     });
     installFactory(audioCtx.proto, (self) => ctxState.get(self));
@@ -221,8 +208,10 @@ export default {
       suspend: [0, function suspend() { return mask.promise(); }],
       resume: [0, function resume() { return mask.promise(); }],
     });
-    instGetter(audioCtx.proto, 'state', function state() { return 'running'; });
-    instGetter(audioCtx.proto, 'baseLatency', function baseLatency() { return 0; });
+    mask.instAccessors(audioCtx.proto, {
+      state: function () { return 'running'; },
+      baseLatency: function () { return 0; },
+    });
 
     // webkit 前缀别名(Chrome 保留;指纹常 `window.AudioContext || window.webkitAudioContext`)。
     Object.defineProperty(window, 'webkitAudioContext', { value: audioCtx.ctor, writable: true, configurable: true, enumerable: false });

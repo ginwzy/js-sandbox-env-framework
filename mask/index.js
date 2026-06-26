@@ -213,6 +213,28 @@ export function createMask(window) {
     }
   }
 
+  // 伪 EventTarget 原型登记表:parent 接到 window.EventTarget.prototype 的 mask 造接口,其实例无 jsdom EventTarget
+  // slot(brandless)→ 经原型链继承到的 add/removeEventListener/dispatchEvent 一调即抛 jsdom brand-check。
+  // patch/eventtarget 据本表对这些实例 short-circuit。**按 proto 登记**(非预枚举实例)→ 自动覆盖页面运行期才 new
+  // 的壳(Worker/RTCPeerConnection/Notification/MediaQueryList…),实例集做不到。
+  const brandlessProtos = new Set();
+  function markBrandless(proto) { if (proto && typeof proto === 'object') brandlessProtos.add(proto); return proto; }
+  // 设原型父链;父为 EventTarget.prototype 时顺带登记 brandless(mask 造接口实例必无 jsdom slot,无误判)。
+  function setParent(proto, parent) {
+    Object.setPrototypeOf(proto, parent);
+    if (parent === window.EventTarget.prototype) markBrandless(proto);
+  }
+  /** 把 proto 接到 EventTarget.prototype 并登记 brandless —— 供 protochain/screen/matchMedia 等直接 reparent 处用。 */
+  function eventTargetProto(proto) { setParent(proto, window.EventTarget.prototype); return proto; }
+  /** obj 是否伪 EventTarget(原型链至 ETP 之前命中某 brandless proto)。供 patch/eventtarget 的 brand-check short-circuit。 */
+  function isBrandlessEventTarget(obj) {
+    const ETP = window.EventTarget.prototype;
+    for (let p = obj == null ? null : Object.getPrototypeOf(obj); p && p !== ETP; p = Object.getPrototypeOf(p)) {
+      if (brandlessProtos.has(p)) return true;
+    }
+    return false;
+  }
+
   const ifaceRegistry = new Map();
   function iface(name, props = {}) {
     // 重名守卫:两个 patch 抢注同名 window 接口类会令后者静默覆盖前者(且先注册的实例 proto 身份分裂)。
@@ -238,13 +260,43 @@ export function createMask(window) {
   }
 
   /**
+   * iface 的**可构造**对偶:真机可 new 的接口(OfflineAudioContext/AudioContext/AudioBuffer/Path2D/
+   * Worker/RTCPeerConnection/Notification/PerformanceObserver…)。区别 iface 的"new 即抛 Illegal":
+   * 无 new 调用才抛,带 new 则 init(self, args) 初始化实例(args 可用于参数校验并抛错)。无-new 文案
+   * 统一为真机[实测]完整句(短句逐字比对即偏离);经 markCtorProto 保证 constructor 落 own 键末位
+   * (不依赖"装方法/装 constructor 的书写顺序",见 iface 头注)。
+   * opts = { parent?, methods?, accessors?, statics?, props? }:parent=插入父原型(如 EventTarget.prototype);
+   * statics=装在 ctor 自身的 data 方法。返回同 iface 的 { ctor, proto, create }。
+   */
+  function ctorIface(name, len, init, opts = {}) {
+    const ctor = native(function (...args) {
+      if (!new.target) {
+        throw new window.TypeError(`Failed to construct '${name}': `
+          + 'Please use the \'new\' operator, this DOM object constructor cannot be called as a function.');
+      }
+      if (init) init(this, args);
+    }, name, len);
+    const proto = adopt(tag({ ...(opts.props || {}) }, name));
+    if (opts.parent) setParent(proto, opts.parent); // parent=ETP 时自动登记 brandless
+    ctor.prototype = proto;
+    Object.defineProperty(proto, 'constructor', { value: ctor, configurable: true, enumerable: false });
+    if (opts.methods) methods(proto, opts.methods);
+    if (opts.accessors) accessors(proto, opts.accessors);
+    if (opts.statics) methods(ctor, opts.statics);
+    Object.defineProperty(window, name, { value: ctor, writable: true, configurable: true, enumerable: false });
+    markCtorProto(proto);
+    const create = (extra = {}) => Object.assign(Object.create(proto), extra);
+    return { ctor, proto, create };
+  }
+
+  /**
    * iface 的常见用法糖:建接口类 + 装 native 方法/getter(可选插父原型)+ 创建单例实例并返回。
    * opts = { methods?, accessors?, props?, parent? }(methods/accessors 见下;props=实例自有数据;parent=
    * 插入的父原型如 EventTarget.prototype)。需"一类多实例"或要分别操作 proto/create 的,直接用底层 iface。
    */
   function singleton(name, opts = {}) {
     const { proto, create } = iface(name);
-    if (opts.parent) Object.setPrototypeOf(proto, opts.parent);
+    if (opts.parent) setParent(proto, opts.parent); // parent=ETP 时自动登记 brandless
     methods(proto, opts.methods || {});
     accessors(proto, opts.accessors || {});
     return create(opts.props || {});
@@ -290,6 +342,37 @@ export function createMask(window) {
     return target;
   }
 
+  /**
+   * accessor 的**实例态**变体:getter 是普通函数、以 `this`=实例 调用(经 WeakMap 取每实例私有状态),
+   * 装在共享 prototype 上。区别 accessor 的两点:① getter 读 `this`(故非箭头),② **不自动 adopt**
+   * (返回值多为 primitive 或已是 window 身份的对象;需要时由 getter 自行 adopt)。inst=单个;instAccessors=批量。
+   */
+  function instAccessor(target, name, getter) {
+    Object.defineProperty(target, name, {
+      get: native(getter, `get ${name}`), enumerable: true, configurable: true,
+    });
+    return target;
+  }
+  function instAccessors(target, table) {
+    for (const [name, getter] of Object.entries(table)) instAccessor(target, name, getter);
+    return target;
+  }
+
+  /**
+   * 装可写 on* 事件处理器访问器(get+set,闭包存 handler)。真机 onX 是原型上的**可写** accessor:get-only 会令
+   * strict 模式 `obj.onX = fn` 抛 TypeError(被 jsdom 异步路径静默吞,正是可观测性盲态);改用 data 属性又会在
+   * 实例上造 own 键、破坏"空实例"不变量。单 closure handler 即够(当前用例 connection/orientation 均为单例)。
+   */
+  function eventHandler(target, name) {
+    let handler = null;
+    Object.defineProperty(target, name, {
+      get: native(() => handler, `get ${name}`, 0),
+      set: native((v) => { handler = v; }, `set ${name}`, 1),
+      enumerable: true, configurable: true,
+    });
+    return target;
+  }
+
   /** 全局装一次:覆盖 window 的 Function.prototype.toString(纵深防御)。 */
   function boot() {
     fn(nativeToString, 'toString');
@@ -312,7 +395,7 @@ export function createMask(window) {
 
   return {
     fn, native, dropOwnToString, wrap, wrapAccessor, deproto, hook, tag,
-    iface, singleton, method, methods, accessor, accessors, mixin, adopt, boot,
-    promise, pending, reorderOwnKeys, markCtorProto, finalizeIfaces,
+    iface, ctorIface, singleton, method, methods, accessor, accessors, instAccessor, instAccessors, eventHandler, mixin, adopt, boot,
+    promise, pending, reorderOwnKeys, markCtorProto, finalizeIfaces, eventTargetProto, isBrandlessEventTarget,
   };
 }
