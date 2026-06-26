@@ -1,32 +1,23 @@
 /**
  * patch/canvas —— Canvas 2D 指纹壳(构造器壳 + 原型方法 native 化 + getContext('2d') 受控壳)。
  *
- * 根因:jsdom 不带 canvas 包 —— canvas.getContext('2d') 返回 null、CanvasRenderingContext2D/ImageData/
- * TextMetrics/CanvasGradient 全 undefined、toDataURL() 返回 null。真机 getContext('2d') **永不**返 null
- * (与 webgl 的 getExtension 相反:那里 null 是合法真机响应、壳才是 tell;这里 null 真机绝不发生、缺壳即
- * tell,且用 canvas 的指纹脚本当场崩溃本身是更强的 tell)。故 canvas 的壳是**必须**的 —— webgl 那条
- * "空壳比缺失更易识破、宁可不给"的判断在此**反转**(同一原则"匹配真机",相反结论)。
+ * 根因:jsdom 不带 canvas 包 —— getContext('2d') 返回 null、CanvasRenderingContext2D/ImageData/TextMetrics/
+ * CanvasGradient 全 undefined、toDataURL() 返回 null。真机 getContext('2d') **永不**返 null,缺壳即 tell(指纹
+ * 脚本当场崩溃更是强 tell)。故 canvas 壳**必须** —— webgl 那条"空壳比缺失更易识破、宁可不给"的判断在此**反转**
+ * (同一原则"匹配真机",相反结论:webgl getExtension 的 null 是合法真机响应,canvas 的 null 真机绝不发生)。
  *
- * 范围(短期,对齐并超 sdenv 下限 —— sdenv 仅给一个空 getImageData):锚定指纹脚本真实触及的不崩调用链:
- *   getContext('2d') → fillStyle/font 赋值 + fillRect/fillText/arc(no-op 不抛) → measureText()→TextMetrics(.width)
- *   → toDataURL()→string / getImageData()→ImageData(.data 读) 。不投机建调用链外的接口(CanvasPattern 等)。
+ * 范围(短期,对齐并超 sdenv 下限):锚定指纹脚本真实触及的不崩调用链:getContext('2d') → fillStyle/font 赋值
+ * + fillRect/fillText/arc(no-op) → measureText()→TextMetrics → toDataURL()→string / getImageData()→ImageData;
+ * 不投机建链外接口。形态:四个接口均真机 window 全局构造器(new 抛 Illegal)→ mask.iface 注册 + instanceof 成立,
+ * 实例由工厂方法产出;getContext 同一 canvas 返回同一 2d context(真机[实测]单例),canvas accessor per-instance。
  *
- * 形态对照真机:CanvasRenderingContext2D/TextMetrics/ImageData/CanvasGradient 均真机 window 全局构造器
- * (new 抛 Illegal constructor)→ 用 mask.iface 注册 window.<Name> + instanceof 成立;实例由工厂方法
- * (getContext/measureText/getImageData/createLinearGradient)产出。getContext 同一 canvas 返回同一 2d
- * context(真机[实测]单例语义),canvas accessor 经 per-instance native getter 读关联 <canvas>。
- *
- * 已知未尽项(陈述现状,非真机保真;留 payload-keyed replay 长期解,harness 不探 canvas → 自测只验**结构**
- * typeof/instanceof/toString/方法 native/返回类型,**不验指纹值**):
- *  - toDataURL/getImageData/measureText 返回**结构有效占位**(正确 type/shape),非真机渲染像素/字体度量 →
- *    指纹**值**不保真;且占位固定 → 跨 mimic 实例字节相同(跨 session 关联 tell)。
- *  - 2d context 属性(fillStyle/font/textBaseline...)真机为 prototype accessor(setter 会规范化颜色等);
- *    此处未建 → 赋值落实例可写自有属性、读回非真机规范化值(不崩,值不保真)。
- *  - ImageData 的 data/width/height 真机为 prototype accessor,此处放实例 own data 属性(可读不崩,结构有差)。
- *  - new ImageData(w,h) 真机合法,此处经 mask.iface 抛 Illegal constructor(指纹少用,getImageData 是主路径)。
- *  - toBlob 未接管:jsdom 29 自带实现、调用[实测]不抛(满足"不崩"),但其 blob 内容非真机渲染(值不保真);
- *    OffscreenCanvas 未建(`new OffscreenCanvas` 抛,涉 worker/transferToImageBitmap,超短期范围)—— 二者均
- *    scoped-out,留长期。
+ * 已知未尽项(陈述现状;留 payload-keyed replay 长期解,harness 不探 canvas → 自测只验**结构**不验指纹值):
+ *  - toDataURL/getImageData/measureText 返**结构有效占位**(正确 type/shape),非真机渲染像素/字体度量 → 值不保真
+ *    且占位固定 → 跨实例字节相同(关联 tell)。
+ *  - 2d context 属性(fillStyle/font/...)、ImageData 的 data/width/height 真机为 prototype accessor,此处落实例 own
+ *    data → 读回非真机规范化值/结构有差(不崩)。
+ *  - new ImageData(w,h) 真机合法,此处 mask.iface 抛 Illegal(指纹少用,getImageData 是主路径)。
+ *  - toBlob(jsdom 自带、不抛但内容非真机渲染)/ OffscreenCanvas(未建,涉 worker)均 scoped-out,留长期。
  */
 
 // 1x1 空白占位 data URL,**按请求 type 自洽**(真机[实测]1x1 toDataURL 各格式输出)。非真机渲染像素、固定值
@@ -71,7 +62,7 @@ export default {
     // isPointInPath 忽略 path 参数,本就 no-op)。
     const path2dProto = mask.adopt(mask.tag({}, 'Path2D'));
     const Path2D = mask.native(function Path2D() {
-      // 完整尾句对齐真机[实测];.stack 首行剥 `Failed to construct 'Path2D': ` 前缀由 patch/stack 复刻。
+      // 完整尾句对齐真机[实测](契约与前缀剥离见 mask.iface)。
       if (!new.target) throw new window.TypeError("Failed to construct 'Path2D': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");
     }, 'Path2D', 0);
     Path2D.prototype = path2dProto;

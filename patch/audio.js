@@ -1,33 +1,24 @@
 /**
  * patch/audio —— Web Audio 指纹壳(可构造 context + 节点链 + getChannelData 占位)。
  *
- * 根因:jsdom 无 Web Audio 实现 —— OfflineAudioContext/AudioContext/AudioBuffer/各 AudioNode 全 undefined →
- * audio 指纹脚本(`new OfflineAudioContext(...)` 起手)当场 ReferenceError/TypeError 崩溃。真机这些全是 window
- * 全局,缺失即 tell(同 canvas:真机永远能跑 audio 指纹链)。
- *
- * 范围(短期,超 sdenv —— sdenv 完全无 audio):锚定指纹脚本真实触及的不崩调用链:
- *   new OfflineAudioContext(ch,len,rate) → createOscillator()/createDynamicsCompressor()/createGain() →
- *   node.connect(dest) 链 → osc.start() → startRendering()→Promise<AudioBuffer> → buffer.getChannelData(0)→Float32Array。
- *   不投机建链外节点(PannerNode/ConvolverNode 等)。
+ * 根因:jsdom 无 Web Audio —— OfflineAudioContext/AudioContext/AudioBuffer/各 AudioNode 全 undefined → audio
+ * 指纹脚本(`new OfflineAudioContext(...)` 起手)当场崩溃。真机这些全是 window 全局,缺失即 tell。范围(短期,
+ * 超 sdenv)锚定指纹脚本真实触及的不崩调用链:OfflineAudioContext → createOscillator/Compressor/Gain →
+ * node.connect 链 → start() → startRendering()→Promise<AudioBuffer> → getChannelData→Float32Array;不投机建链外节点。
  *
  * 形态对照真机:
- *  - OfflineAudioContext/AudioContext/AudioBuffer 真机**可 new**(非 Illegal constructor)→ 用自建可构造壳
- *    ctorIface(区别 mask.iface 的"new 即抛");webkitAudioContext/webkitOfflineAudioContext 别名指向同 ctor。
- *  - 各 AudioNode(Oscillator/DynamicsCompressor/Gain/Analyser/BufferSource/Destination)经工厂方法产出 →
- *    用 mask.iface(new 抛 Illegal)+ 子类 proto 继承 AudioNode 基类(connect/disconnect 住基类原型,真机如此)。
- *  - AudioParam(frequency/detune/gain/threshold...)经 mask.iface;.value 可写、ramp/setValueAtTime 链式返 this。
- *  - node.connect(node) 返回被连 node(真机链式语义),故 osc.connect(comp).connect(ctx.destination) 成立。
+ *  - context/AudioBuffer 真机**可 new** → 自建可构造壳 ctorIface(区别 mask.iface 的"new 即抛");
+ *    webkit{,Offline}AudioContext 别名指向同 ctor。
+ *  - 各 AudioNode 经工厂方法产出 → mask.iface(new 抛 Illegal)+ 子类 proto 继承 AudioNode 基类
+ *    (connect/disconnect 住基类原型,真机如此)。connect 返回被连 node(真机链式)。
+ *  - AudioParam 经 mask.iface;.value 可写、ramp/setValueAtTime 链式返 this。
  *
- * 已知未尽项(陈述现状,非真机保真;留 payload-keyed replay 长期解,harness 不探 audio → 自测只验**结构**,
- * 不验指纹值):
- *  - getChannelData 返回**全 0 占位** Float32Array(正确 type/length),非真机渲染样本 → 音频指纹**值**不保真,
- *    且固定 → 跨 mimic 实例相同(关联 tell)。
- *  - 跳过 BaseAudioContext/AudioScheduledSourceNode/EventTarget 中间继承层(各 Node 直接继承 AudioNode 基类;
- *    EventTarget 方法装 context proto 自身而非继承 EventTarget.prototype,规避 jsdom brand-check),原型链深度
- *    与真机有差(结构缺口)。
- *  - oncomplete/addEventListener('complete') 双路径均触发(FingerprintJS2 主路径已覆盖),但 complete 事件对象
- *    为普通 tagged 对象(非真机 OfflineAudioCompletionEvent 实例);AudioParam/node 的 value/type 为实例 own
- *    data(真机为 prototype accessor)。
+ * 已知未尽项(陈述现状;留 payload-keyed replay 长期解,harness 不探 audio → 自测只验**结构**不验指纹值):
+ *  - getChannelData 返**全 0 占位** Float32Array(正确 type/length),非真机渲染样本 → 值不保真且跨实例相同(关联 tell)。
+ *  - 跳过 BaseAudioContext/AudioScheduledSourceNode/EventTarget 中间继承层(各 Node 直继承 AudioNode 基类;
+ *    EventTarget 方法装 context proto 自身规避 jsdom brand-check)→ 原型链深度与真机有差。
+ *  - complete 事件对象为普通 tagged 对象(非真机 OfflineAudioCompletionEvent);AudioParam/node 的 value/type 为
+ *    实例 own data(真机为 prototype accessor)。
  */
 
 export default {
@@ -40,8 +31,7 @@ export default {
     const ctorIface = (name, len, init) => {
       const proto = mask.adopt(mask.tag({}, name));
       const ctor = mask.native(function (...args) {
-        // window-realm TypeError:对齐 mask.iface 的跨 realm 契约(页面 instanceof TypeError 须为 true)。
-        // 完整尾句对齐真机[实测];缺尾句是 message tell。.stack 首行剥 `Failed to construct '<Name>': ` 前缀由 patch/stack 复刻。
+        // window-realm TypeError + 完整尾句对齐真机[实测](契约与前缀剥离见 mask.iface)。
         if (!new.target) throw new window.TypeError(`Failed to construct '${name}': Please use the 'new' operator, this DOM object constructor cannot be called as a function.`);
         if (init) init(this, args);
       }, name, len);
@@ -56,9 +46,8 @@ export default {
     const instGetter = (proto, name, get) =>
       Object.defineProperty(proto, name, { get: mask.native(get, `get ${name}`), enumerable: true, configurable: true });
 
-    // 简易 EventTarget(装 context proto 自身,不继承 jsdom EventTarget.prototype —— 后者 webidl brand-check 对
-    // 非 jsdom 实例抛 Illegal invocation,故自维护 listener map)。真机 EventTarget 方法住
-    // EventTarget.prototype、context 经原型链继承(此处装 proto 自身,原型链深度有差,记"已知未尽项")。
+    // 简易 EventTarget:装 context proto 自身并自维护 listener map —— 不继承 jsdom EventTarget.prototype,
+    // 后者 webidl brand-check 对非 jsdom 实例抛 Illegal invocation(原型链深度有差,见头注"已知未尽项")。
     const listeners = new WeakMap();
     const fireEvent = (target, type, ev) => {
       const m = listeners.get(target);

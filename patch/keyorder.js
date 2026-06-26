@@ -5,20 +5,16 @@
  * navigator(标量 + 接口/方法)、uadata(userAgentData)、plugins(plugins/mimeTypes)。任一未跑完就重排,
  * 其后注入的键会 append 到已排好的序之后 → 再次错序。故 after 声明全部贡献者,且注册在 patch 列表末位。
  *
- * 顺序数据源:per-host 静态数组,是 per-(host,version) 常量(同 Chrome 版本的 Blink IDL 序与平台无关),
- * authoring 时从 harness/baselines 提取。刻意不在运行时读 baseline 文件 —— producer(patch)不依赖 verifier
- * (harness)的 fixture。chrome 序取自 linux-chrome-v143(desktop:含 windowControlsOverlay、无 contacts);
- * webview 序取自 android-webview-v138(mobile:含 contacts/connection 前置、无 chrome-only 键)。两序的键集
- * 与 patch 在对应 host 下的注入集一致(集合正确性见 diff 的 sameSet);本 pass 只改顺序。
+ * 顺序数据源:per-host 静态数组(per-(host,version) 常量,Blink IDL 序与平台无关),authoring 时从
+ * harness/baselines 提取。刻意不在运行时读 baseline —— producer(patch)不依赖 verifier(harness)的 fixture。
+ * chrome 序取自 linux-chrome-v143、webview 序取自 android-webview-v138;两序键集与对应 host 注入集一致
+ * (集合正确性见 diff 的 sameSet),本 pass 只改顺序。
  *
- * 覆盖面与机制边界:本 pass 是**后置重排**,只能动 configurable 键 —— delete 后重建的键必然 append 到
- * 残留键之后。故仅适用于"全 configurable"的原型:
- *  - Navigator.prototype(80/56,全 configurable)✓
- *  - HTMLDivElement.prototype(align,constructor,全 configurable)✓
- *  - Node.prototype / Event.prototype:真机序里 configurable accessors 排在 non-configurable WebIDL 常量
- *    (ELEMENT_NODE… / NONE,CAPTURING_PHASE…)**之前**,但 jsdom 把这些常量冻结在末尾、删不动。后置重排
- *    无法把键插到冻结常量之前 → 结构上做不到,须在 jsdom 原型构造期拦截(另一种更深的技术,本 pass 不覆盖)。
- *  DOM 原型的真机序 host 无关(同 Chromium 内核),故共用一张;Navigator 因 host 门控键集而异 → per-host。
+ * 覆盖面与机制边界:本 pass 是**后置重排**,delete 后重建的键必然 append 到残留键之后,故仅适用于"全
+ * configurable"的原型(Navigator.prototype ✓、HTMLDivElement.prototype ✓)。Node/Event.prototype 做不到:真机序里
+ * configurable accessors 排在 non-configurable WebIDL 常量(ELEMENT_NODE… / CAPTURING_PHASE…)**之前**,但 jsdom 把
+ * 常量冻结在末尾删不动,后置重排插不到其前 —— 须在 jsdom 原型构造期拦截(更深的技术,本 pass 不覆盖)。
+ * DOM 原型真机序 host 无关(同内核)→ 共用一张;Navigator 因 host 门控键集而异 → per-host。
  */
 
 // Navigator.prototype 真机 getOwnPropertyNames 序。键集随 host 门控而异 —— 用注入侧同一条 host 轴选择。

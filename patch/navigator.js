@@ -11,12 +11,11 @@
  */
 import { chromeHost, mobileOnly, desktopOnly } from './gates.js';
 
-// data 方法形状表:[名, arity, 实现, gate?]。row 形状与 patch/globals.methodTable 对齐。
-// 真机为 Navigator.prototype 上 enumerable 的 data 方法;length 取自真机基线,与箭头实参个数解耦(fn 校正)。
-// secure-context 批(getBattery 起):corrected 基线经 secure 重采暴露 —— 旧基线走局域网 http(非 secure
-// context)采不到 → 此前以 MISSING 掩盖,同 userAgentData 根因;jsdom 全缺。可信壳语义:void→resolve、
+// data 方法形状表:[名, arity, 实现, gate?](row 形状同 patch/globals.methodTable)。真机为 Navigator.prototype
+// 上 enumerable 的 data 方法;length 取自真机基线(fn 校正,与箭头实参数解耦)。可信壳语义:void→resolve、
 // 返回复杂对象→永久 pending、旧式 (constraints,success,error) 回调签名→无返回。
-// chromeHost 批:WebView 缺的 Chrome 专属(Protected Audience/FLEDGE 广告竞价、Protocol Handler、AppBadge 部分)。
+// 分批:secure-context 批(getBattery 起,jsdom 全缺,同 userAgentData 经 secure 重采才暴露);chromeHost 批
+// (WebView 缺的 Chrome 专属:Protected Audience 广告竞价、Protocol Handler、AppBadge)。
 function methodTable(mask) {
   const { promise, pending, adopt } = mask;
   return [
@@ -47,14 +46,11 @@ function methodTable(mask) {
   ];
 }
 
-// 接口单例形状表:navigator.<key> = accessor getter,返回 window 全局接口类的单例。
-// 表项 { cls, methods?, props?, gate? } 即 mask.singleton 的 (name, opts) —— driver 直接透传。
-// 真机:Navigator.prototype accessor getter 返回内部接口单例(多次访问 === 同一对象)。driver eager 建实例
-// + 注册全局类(真机这些类确为 window 全局),getter 仅返回单例 —— 不在 getter 内重建(否则 === 不成立、
-// 且每次访问重复注册 window 类)。补壳深度按检测频率:高频(media/clipboard/storage/credentials/
-// serviceWorker/gpu)补关键方法,低频接口留裸实例(正确 [object Tag]/typeof/instanceof 即够指纹面)。
-// 刻意不插 EventTarget 层:真机这些多继承 EventTarget,但插了会令 addEventListener 触发 jsdom brand-check
-// (同 screen/connection);原型链保真属另一轴单独处理。
+// 接口单例形状表:navigator.<key> = accessor getter,返回 window 全局接口类的单例。表项 { cls, methods?, props?,
+// gate? } 即 mask.singleton 的 (name, opts),driver 透传。真机这些 getter 多次访问 === 同一对象 → driver eager
+// 建实例 + 注册全局类,getter 仅返回单例(不在 getter 内重建,否则破 === 且重复注册)。补壳深度按检测频率:
+// 高频(media/clipboard/storage/credentials/serviceWorker/gpu)补关键方法,低频留裸实例(正确 tag/typeof/instanceof
+// 即够指纹面)。刻意不插 EventTarget 层:插了会令 addEventListener 触发 jsdom brand-check(同 screen/connection)。
 function ifaceTable(mask) {
   const { promise, pending, adopt } = mask;
   return {
@@ -183,11 +179,10 @@ export default {
     // chrome-only 非接口标量(部署强制开关,非单例)—— 不入 ifaceTable(那是接口单例专表)。
     if (chromeHost(traits)) accessors.deprecatedRunAdAuctionEnforcesKAnonymity = () => true;
 
-    // ── 特例(刻意不入表):connection 的实例数据来自 profile(非 host/formFactor 门控),故裸 iface 直建;
-    //    在 p.connection 缺省时整属性不存在(真机无网络信息时亦然)。
-    //    真机:downlink/effectiveType/rtt/saveData 是 NetworkInformation.prototype 上的只读 IDL attribute、
-    //    onchange 是可写事件处理器 attribute;实例自身无 own 数据键(L2 基线 navigator.connection own keys 为空)。
-    //    原先 create({onchange,...p.connection}) 经 Object.assign 把值挂成实例 own 键 → 5 条 EXTRA tell。
+    // ── 特例(刻意不入表):connection 数据来自 profile(非 host/formFactor 门控)→ 裸 iface 直建;p.connection
+    //    缺省时整属性不存在(真机无网络信息时亦然)。真机 downlink/effectiveType/rtt/saveData 是
+    //    NetworkInformation.prototype 只读 IDL attribute、onchange 可写,实例自身无 own 数据键(L2 基线为空)——
+    //    故全装原型 accessor;若 Object.assign 挂实例会造 5 条 EXTRA tell。
     if (p.connection) {
       const ni = mask.iface('NetworkInformation');
       const c = p.connection;

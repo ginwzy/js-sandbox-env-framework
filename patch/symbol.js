@@ -9,23 +9,14 @@
  * "[webidl2js]" 直接点名 jsdom 代码生成器,真实浏览器的 window/document/navigator 等 getOwnPropertySymbols 均为 []。
  * vmp 遍历反射面一测即破。
  *
- * 采集策略(关键):本 patch 在 pipeline 装配期运行,**先于任何页面脚本**。故此刻 jsdom 对象上的任何 own symbol
- * 必然是 jsdom 内部 symbol(页面尚无机会注入自己的 symbol)。因此从一批代表性包装对象上**全量采集 own symbol**,
- * 即得完整内部集合 —— 无需按描述串(如 '[webidl2js]')匹配,从根上杜绝误伤页面合法 Symbol('impl') 之类;
- * 且自动覆盖未来未采样的包装类型(impl 为跨包装共享的模块级 symbol,但存在同描述不同身份的多个 impl,故按身份采集而非描述)。
+ * 采集策略(关键):本 patch 在 pipeline 装配期运行,**先于任何页面脚本**,故此刻 jsdom 对象上的任何 own symbol
+ * 必然是内部 symbol。因此从一批代表性包装对象上**全量按身份采集 own symbol**,即得完整内部集合 —— 无需按描述串
+ * (如 '[webidl2js]')匹配,从根上杜绝误伤页面合法 Symbol;且自动覆盖未采样的包装类型,并区分同描述不同身份的多个 impl。
  *
- * 过滤策略:对三条会暴露 symbol 键的反射 API 按身份过滤(对照 sdenv browser/chrome/Object.js 的 getOwnPropertySymbols 壳,
- * 但 sdenv 仅处理 window 且粗暴返回 []):
- *   Object.getOwnPropertySymbols(o)        —— 滤除内部 symbol(覆盖所有包装对象,非仅 window)。
- *   Reflect.ownKeys(o)                     —— 同时含字符串键与 symbol 键,仅滤 symbol 部分。
- *   Object.getOwnPropertyDescriptors(o)    —— 结果对象的 own symbol 键中删除内部 symbol。
- * 内部 symbol 多不可枚举(window 上 registry/tracker 可枚举但其值经 symbol 键不可达),Object.assign/spread/
- * Object.keys/for-in 不复制不可达 symbol;即便经 spread 物理拷到副本,副本的 getOwnPropertySymbols 同样被本壳过滤,
- * 反射面始终查不到、拿不到该 symbol 引用 —— 故三条反射 API 足以闭合泄漏面。impl 等 symbol 是 jsdom 运行所必需(挂实现
- * 背板),不能删除,只能在反射层隐藏。
- *
- * 验证:Object.getOwnPropertySymbols(window/document/navigator) 不含任何 jsdom 内部 symbol;Reflect.ownKeys /
- * getOwnPropertyDescriptors 同步干净;页面自建 Symbol 属性照常可见;壳函数 toString/name/length 均贴近 native。
+ * 过滤策略:对三条会暴露 symbol 键的反射 API 按身份过滤(对照 sdenv Object.js 的 getOwnPropertySymbols 壳,但 sdenv
+ * 仅处理 window 且粗暴返回 []):getOwnPropertySymbols(滤除,覆盖所有包装对象)、Reflect.ownKeys(仅滤 symbol 部分)、
+ * getOwnPropertyDescriptors(从结果删内部 symbol 键)。internal symbol 不能删(jsdom 挂实现所需),只能在反射层隐藏;
+ * 即便经 spread 物理拷到副本,副本的 getOwnPropertySymbols 同样被本壳过滤 → 反射面始终拿不到引用,三条 API 足以闭合泄漏面。
  */
 export default {
   name: 'symbol',
