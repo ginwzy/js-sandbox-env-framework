@@ -26,15 +26,14 @@ export default {
   applies: (t) => t.host === 'chrome',
   apply({ window, mask }) {
     const defineMethods = mask.methods;
-    // 类数组容器:索引 own 属性(enumerable)+ named(non-enumerable)+ length(non-enumerable data)。
-    // 真机 length 在 prototype 为 accessor;此处简化为实例 data(harness 不探此深度)。
+    // 类数组容器:索引 own 属性(enumerable)+ named(non-enumerable)。length 不落实例,见下:真机 length 在
+    // prototype 为 accessor、实例 ownKeys 无 length;装实例 data 会多出真机没有的 own 键(结构 tell)。
     const fillCollection = (arr, items, keyOf) => {
       items.forEach((it, i) => Object.defineProperty(arr, i, { value: it, enumerable: true, configurable: true }));
       for (const it of items) {
         const k = keyOf(it);
         if (k && !(k in arr)) Object.defineProperty(arr, k, { value: it, enumerable: false, configurable: true });
       }
-      Object.defineProperty(arr, 'length', { value: items.length, enumerable: false, configurable: true });
       return arr;
     };
 
@@ -42,6 +41,10 @@ export default {
     const MimeType = mask.iface('MimeType');
     const PluginArray = mask.iface('PluginArray');
     const MimeTypeArray = mask.iface('MimeTypeArray');
+
+    // length 原型 accessor(实例态:读 this 数连续整数索引)—— 三类容器共用一份 getter。
+    const lengthGetter = function length() { let n = 0; while (n in this) n += 1; return n; };
+    for (const C of [PluginArray, MimeTypeArray, Plugin]) mask.instAccessor(C.proto, 'length', lengthGetter);
 
     const collMethods = {
       item: [1, function item(i) { return this[i] ?? null; }],

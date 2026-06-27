@@ -68,20 +68,23 @@ export default {
     const highAll = { ...d.high, ...(captured || {}), brands, mobile, platform };
     delete highAll.brands; // brands/mobile/platform 是低熵基属性,下面单独装;high 投影时再并回
 
+    // brands/mobile/platform 走原型 accessor(非实例 own data):真机 NavigatorUAData 这三个是
+    // prototype 上的 getter、实例 ownKeys 为空。装实例 own 会多出真机没有的键(结构 tell)。
+    const brandsVal = mask.adopt(brands.map((b) => mask.adopt({ ...b })));
     const uaData = mask.singleton('NavigatorUAData', {
       methods: {
         getHighEntropyValues: [1, (hints) => {
-          const base = { brands: mask.adopt(brands.map((b) => mask.adopt({ ...b }))), mobile, platform };
+          const base = { brands: brandsVal, mobile, platform };
           const list = Array.isArray(hints) ? hints : [];
           for (const h of list) if (h in highAll) base[h] = mask.adopt(highAll[h]);
           return window.Promise.resolve(mask.adopt(base));
         }],
         toJSON: [0, () => mask.adopt({ brands: brands.map((b) => ({ ...b })), mobile, platform })],
       },
-      props: {
-        brands: mask.adopt(brands.map((b) => mask.adopt({ ...b }))),
-        mobile,
-        platform,
+      accessors: {
+        brands: () => brandsVal,
+        mobile: () => mobile,
+        platform: () => platform,
       },
     });
 

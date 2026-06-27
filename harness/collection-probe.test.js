@@ -45,7 +45,7 @@ const ctor = (id, name, len) => {
   ok(`${id} 构造器壳:native + name='${name}' + length=${len}`,
     !!t && t.resolved && t.category === 'function' && t.fn.toStringNative && t.fn.name === name && t.fn.length === len);
 };
-ctor('window.Worker', 'Worker', 2);
+ctor('window.Worker', 'Worker', 1); // 真机 Worker(scriptURL, options?) 首参必选 → length=1(jsdom 误为 2)
 ctor('window.RTCPeerConnection', 'RTCPeerConnection', 0);
 ctor('window.Notification', 'Notification', 1);
 

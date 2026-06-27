@@ -30,6 +30,9 @@ function ok(name, cond) {
 const PAIRS = [
   ['chrome-mac', 'macos-chrome-v148', 5],
   ['macos-chrome-v148', 'macos-chrome-v148', 5],
+  // v149 是含新探针 target(plugins/mimeTypes collection + Worker/RTC/Notification/indexedDB/
+  // visualViewport/userAgentData)的首份真机基线 —— 守这些盲区面的 EXTRA===0(实例 own 键不越真机)。
+  ['macos-chrome-v149', 'macos-chrome-v149', 5],
   ['android-webview-v138', 'android-webview-v138', 5],
   ['linux-chrome', 'linux-chrome-v143', 5],
 ];

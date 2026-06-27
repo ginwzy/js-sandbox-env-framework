@@ -83,6 +83,11 @@ new target-id**,绝不改动既有 target 的键集。(plugins/mimeTypes/userAge
 
 ### Phase 2 — 设备闸,真机重采后接入 gate
 
+**进度**:macOS Chrome 已重采(`macos-chrome-v149`,71/71),接入 gate;新探针照出 8 个真 tell 并已修
+(plugins/mimeTypes.length + uadata.brands/mobile/platform + visualViewport.on* 由实例 own 迁原型
+accessor;Worker.length 2→1)。**剩**:linux / android 同法重采 + 接 gate。插件**值集**与真机完全一致
+(硬编码 PDF 集首次获真机验证)。
+
 5. **真机重采基线**:`capture/server.js:79` 已直读 `harness/probe.js` 服 `/probe.js`,采集服务与
    mimic 侧**共用同一份 probe** → 改完 probe.js,重采自动含新 target/collection 数据。**不被 yvq.26
    阻塞**(yvq.26 是合并双服务,probe 路径今已通)。真机访问 capture 页采 linux + android 各一份,

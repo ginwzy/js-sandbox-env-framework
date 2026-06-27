@@ -73,8 +73,9 @@ export default {
     const makeSingleton = mask.singleton;
 
     // Worker:postMessage/terminate;不真正加载脚本(壳),保留可 addEventListener。
+    // length=1:真机 Worker(scriptURL, options?) 仅首参必选(jsdom 误为 2)。
     if (typeof W.Worker !== 'function') {
-      makeCtor('Worker', 2, {
+      makeCtor('Worker', 1, {
         init: (self) => { self.onmessage = null; self.onerror = null; self.onmessageerror = null; },
         methods: { postMessage: [1, () => undefined], terminate: [0, () => undefined] },
       });
@@ -134,8 +135,11 @@ export default {
           offsetLeft: () => 0, offsetTop: () => 0, pageLeft: () => 0, pageTop: () => 0,
           width: () => win.innerWidth ?? 0, height: () => win.innerHeight ?? 0, scale: () => 1,
         },
-        props: { onresize: null, onscroll: null },
       });
+      // onresize/onscroll 走原型可写 accessor(非实例 own data):真机在 VisualViewport.prototype、实例空。
+      const vvProto = Object.getPrototypeOf(vv);
+      mask.eventHandler(vvProto, 'onresize');
+      mask.eventHandler(vvProto, 'onscroll');
       Object.defineProperty(W, 'visualViewport', {
         get: native(() => vv, 'get visualViewport'), enumerable: true, configurable: true,
       });
