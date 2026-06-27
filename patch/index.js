@@ -20,6 +20,7 @@ import clock from './clock.js';
 import performance from './performance.js';
 import protochain from './protochain.js';
 import eventtarget from './eventtarget.js';
+import domproto from './domproto.js';
 import keyorder from './keyorder.js';
 
-export const patches = [windowPatch, globals, stack, symbol, navigator, uadata, plugins, screen, chrome, touch, canvas, webgl, audio, clock, performance, protochain, eventtarget, keyorder];
+export const patches = [windowPatch, globals, stack, symbol, navigator, uadata, plugins, screen, chrome, touch, canvas, webgl, audio, clock, performance, protochain, eventtarget, domproto, keyorder];

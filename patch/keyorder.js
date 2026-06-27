@@ -50,15 +50,21 @@ const NAVIGATOR_ORDER = {
 
 // DOM 原型真机序(host 无关)。仅收"全 configurable"者(见上:Node/Event 受 non-configurable 常量阻塞,不入表)。
 const HTML_DIV_ELEMENT_ORDER = ['align', 'constructor'];
+// EventTarget.prototype:domproto 补 when 后键集补全 → 激活 order 检测。须重排,因 jsdom 把
+// dispatchEvent/removeEventListener 排反、且 append 的 when 落末位(真机 when 在 constructor 前)。
+// 全 configurable(webidl2js 方法 + when),后置重排可行。
+const EVENT_TARGET_ORDER = ['addEventListener', 'dispatchEvent', 'removeEventListener', 'when', 'constructor'];
 
 export default {
   name: 'keyorder',
   // after window:DOM 原型方法/访问器由 window sweep native 化,须在其后捕获最终描述符。
   // after navigator/uadata/plugins:Navigator.prototype 键由三者共同贡献,须等键集齐备。
-  after: ['window', 'navigator', 'uadata', 'plugins'],
+  // after domproto:EventTarget.prototype.when 须先补齐再重排(否则 order 缺 when)。
+  after: ['window', 'navigator', 'uadata', 'plugins', 'domproto'],
   apply({ window, mask, traits }) {
     const navOrder = NAVIGATOR_ORDER[traits.host];
     if (navOrder) mask.reorderOwnKeys(window.Navigator.prototype, navOrder);
     mask.reorderOwnKeys(window.HTMLDivElement.prototype, HTML_DIV_ELEMENT_ORDER);
+    mask.reorderOwnKeys(window.EventTarget.prototype, EVENT_TARGET_ORDER);
   },
 };
