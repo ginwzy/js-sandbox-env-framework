@@ -28,15 +28,12 @@ export const RULES = [
   // 访问器 native 化 + getter own-toString 已修:patch/window sweep 经 mask.wrapAccessor 把 jsdom 原生
   // accessor get/set 一并 native 化,mask.mixin 删自造 getter 的 own toString。原两条白名单规则
   // (accessor.get.toStringNative / accessor.(get|set).hasOwnToString)已无匹配项,删除以让 gate 重新守住。
-  // yvq.6(window 全局函数 fetch/matchMedia/... + Navigator.prototype 标准接口 + 缺失全局对象)已补,
-  // 其 MISSING 项清零;原"bucket==='MISSING' 一刀切"规则拆为下列按 target 精确归属的承接锚点,
-  // 不再留 yvq.6 悬空引用(yvq.6 关闭后即腐烂)。剩余 MISSING 全属其它覆盖缺口。
-  {
-    issue: 'yvq.20',
-    reason: 'jsdom 版本落后,DOM 原型(Document/Element/HTMLElement/EventTarget/Node/Event.prototype)缺较新标准方法 —— 覆盖缺口,独立任务。',
-    match: (e) => e.bucket === 'MISSING'
-      && /^(Document|Element|HTMLElement|EventTarget|Node|Event)\.prototype$/.test(e.targetId),
-  },
+  // 历史:曾有一条"bucket==='MISSING' 一刀切"兜底覆盖所有缺口;各面补齐后拆为按 target 精确归属的承接锚点。
+  // 其中 DOM 原型锚点(Document/Element/HTMLElement/EventTarget.prototype 缺方法 / 访问器)已随 patch/domproto
+  // 补齐(据真机基线补方法 + 访问器,keyorder per-host 重排键序)、MISSING 清零而删 —— 删除以让 gate 重新守住
+  // 该覆盖面。Node/Event.prototype 无缺失方法(残留是 ownKeys.order 枚举序轴,受 non-configurable WebIDL 常量
+  // 阻塞,归该轴单独清理);更高版本基线(v148/v149)较注入基线(v143)多出的版本漂移键仍 MISSING 但非阻断,
+  // 待基线刷新另议。剩余按 target 锚点:
   {
     issue: 'yvq.21',
     reason: 'jsdom 实例对象缺真机标准扩展键:window.chrome(loadTimes/csi/app)、Screen(availLeft/availTop/orientation)—— 覆盖缺口,独立任务。',
