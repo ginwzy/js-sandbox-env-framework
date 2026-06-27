@@ -83,5 +83,47 @@ const fnT = (id, fn) => ({ id, category: 'function', resolved: true, fn });
     hostOf({ targets: [], meta: { ua: 'Mozilla/5.0 (Linux; Android 13; Pixel 7; wv) Version/4.0 Chrome/131 Mobile Safari/537.36' } }) === 'webview');
 }
 
+// —— 集合值级 diff:plugins length / 项字段(经典 headless tell:length=0)——
+const coll = (length, items) => ({
+  id: 'navigator.plugins', category: 'object', kind: 'collection', resolved: true,
+  tag: '[object PluginArray]', protoChain: ['PluginArray.prototype', 'Object.prototype'],
+  ownKeys: [], symbolKeys: [], keys: {}, collection: { length, items },
+});
+const PDF = 'Portable Document Format';
+const fullPlugins = () => coll(5, [
+  { name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: PDF, length: 2 },
+  { name: 'Chrome PDF Viewer', filename: 'internal-pdf-viewer', description: PDF, length: 2 },
+  { name: 'Chromium PDF Viewer', filename: 'internal-pdf-viewer', description: PDF, length: 2 },
+  { name: 'Microsoft Edge PDF Viewer', filename: 'internal-pdf-viewer', description: PDF, length: 2 },
+  { name: 'WebKit built-in PDF', filename: 'internal-pdf-viewer', description: PDF, length: 2 },
+]);
+{
+  // 同集合 → 0 TELL(值对齐不误报)。
+  const s = summarize(diff(complete([fullPlugins()]), complete([fullPlugins()])));
+  ok('plugins 集合一致 → 0 collection TELL', (s.counts.TELL || 0) === 0 && s.gatePass === true);
+}
+{
+  // headless 基线:真机 length=5,mimic 误为空 → collection.length TELL 阻断(探针抓得到 length=0)。
+  const headless = coll(0, []);
+  const entries = diff(complete([fullPlugins()]), complete([headless]));
+  const e = entries.find((x) => x.field === 'collection.length');
+  const s = summarize(entries);
+  ok('plugins length 5≠0 → collection.length TELL 阻断', !!e && e.bucket === 'TELL' && e.severity === 'fatal' && !e.whitelist && s.gatePass === false);
+}
+{
+  // 单项字段错配(name 被改)→ 逐项 collection.item TELL,定位到索引。
+  const bad = fullPlugins();
+  bad.collection.items[1].name = 'Bogus Viewer';
+  const entries = diff(complete([fullPlugins()]), complete([bad]));
+  const e = entries.find((x) => x.field === 'collection.item' && x.key === '[1].name');
+  ok('plugins 项 name 错配 → collection.item TELL(带索引定位)', !!e && e.bucket === 'TELL' && !e.whitelist);
+}
+{
+  // 部分基线纪律:基线未给 collection → 不判(即便 mimic 有)。
+  const baseNoColl = { id: 'navigator.plugins', category: 'object', kind: 'collection', resolved: true, tag: '[object PluginArray]', protoChain: ['PluginArray.prototype', 'Object.prototype'], ownKeys: [], symbolKeys: [], keys: {} };
+  const s = summarize(diff(complete([baseNoColl]), complete([fullPlugins()])));
+  ok('基线无 collection → 不反推 TELL(部分基线纪律)', (s.counts.TELL || 0) === 0);
+}
+
 console.log(`\nharness 回归:${pass} 通过 / ${failed} 失败`);
 process.exit(failed ? 1 : 0);

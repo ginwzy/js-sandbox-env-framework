@@ -102,6 +102,35 @@
     };
   }
 
+  /**
+   * 类数组集合的**值级**采集 —— 有意越过 probe "只采结构不采身份值" 契约:plugins/mimeTypes 是 host 固定的
+   * 不变量集(Chrome 统一 PDF viewer 后恒 5 plugin × 2 mimeType),非 per-device 身份值,故归结构 harness
+   * 守护(不归 profile.validate)。`plugins.length=0` 是经典 headless tell,结构面采不到(length 仅是个数值),
+   * 必须直采 length + 逐索引项的标量字段才能比对。itemFields 由 target 显式声明,只取 string/number/boolean
+   * (跨回 Node 仍只过 primitive,守 probe 铁律);非标量字段(如 enabledPlugin 反指)不列,避免环引用序列化。
+   */
+  function collectionRecord(o, itemFields) {
+    var length = -1;
+    try { length = (typeof o.length === 'number') ? o.length : -1; } catch (e) { length = -1; }
+    var items = [];
+    var n = length >= 0 ? length : 0;
+    for (var i = 0; i < n && i < 64; i++) {
+      var el;
+      try { el = o[i]; } catch (e) { el = undefined; }
+      var item = {};
+      for (var j = 0; j < itemFields.length; j++) {
+        var f = itemFields[j];
+        try {
+          var v = el == null ? undefined : el[f];
+          var t = typeof v;
+          item[f] = (t === 'string' || t === 'number' || t === 'boolean') ? v : typeofSafe(v);
+        } catch (e) { item[f] = '<throw>'; }
+      }
+      items.push(item);
+    }
+    return { length: length, items: items };
+  }
+
   /** 对象 target:类型标签 + 原型链 + own 键(原始枚举顺序)+ 每键形态 + symbol 键。 */
   function objectRecord(o) {
     var keys = {};
@@ -130,6 +159,8 @@
   // t1:true 标记 T1(方法 native 化)已修目标 —— harness 验收的子集。
   function F(id, get) { return { id: id, category: 'function', get: get, t1: true }; }
   function O(id, kind, get) { return { id: id, category: 'object', kind: kind, get: get }; }
+  // 类数组集合 target:除 objectRecord 结构外,额外采 length 值 + 逐项 itemFields 标量(值级 diff)。
+  function C(id, get, itemFields) { return { id: id, category: 'object', kind: 'collection', get: get, itemFields: itemFields }; }
 
   var W = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : this);
 
@@ -199,7 +230,19 @@
     O('navigator', 'instance', function () { return W.navigator; }),
     O('screen', 'instance', function () { return W.screen; }),
     O('navigator.connection', 'instance', function () { return W.navigator.connection; }),
-    O('window.chrome', 'instance', function () { return W.chrome; })
+    O('window.chrome', 'instance', function () { return W.chrome; }),
+
+    // —— 已补壳但此前 probe 盲区:plugins/mimeTypes(值级)+ 可 new 类/单例(结构)——
+    // plugins length=0 是经典 headless tell;item 字段对照真机固定 PDF 集(name/filename/description)。
+    C('navigator.plugins', function () { return W.navigator.plugins; }, ['name', 'filename', 'description', 'length']),
+    C('navigator.mimeTypes', function () { return W.navigator.mimeTypes; }, ['type', 'suffixes', 'description']),
+    O('navigator.userAgentData', 'instance', function () { return W.navigator.userAgentData; }),
+    O('window.visualViewport', 'instance', function () { return W.visualViewport; }),
+    O('window.indexedDB', 'instance', function () { return W.indexedDB; }),
+    // 可 new 接口类:采构造器壳形态(name/length/native/hasPrototype);其 .prototype own 键待真机基线后再加。
+    F('window.Worker', function () { return W.Worker; }),
+    F('window.RTCPeerConnection', function () { return W.RTCPeerConnection; }),
+    F('window.Notification', function () { return W.Notification; })
   ];
 
   function buildSnapshot() {
@@ -228,6 +271,7 @@
           rec.ownKeys = o.ownKeys;
           rec.symbolKeys = o.symbolKeys;
           rec.keys = o.keys;
+          if (t.kind === 'collection') rec.collection = collectionRecord(obj, t.itemFields || []);
         }
       } catch (e) {
         rec.error = String(e && e.message || e);

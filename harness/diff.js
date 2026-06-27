@@ -20,6 +20,7 @@ const FATAL = new Set([
   'protoChain', 'tag', 'key.type',
   'flags.enumerable',
   'fn.name', 'fn.length', 'fn.toStringNative', 'fn.hasOwnToString',
+  'collection.length', 'collection.item',
 ]);
 // EXTRA 里属"沙箱泄漏"的字段 → fatal(target/键真 Chrome 没有);symbolKey 留 warn,由 symbol 白名单规则兜。
 const EXTRA_FATAL = new Set(['resolved', 'key']);
@@ -87,6 +88,27 @@ function arrEq(a, b) {
   return true;
 }
 
+/**
+ * 类数组集合的值级比对:length 差、逐项字段差均为 TELL(可被检测器识破的"谎言",如 plugins.length=0)。
+ * 走部分基线纪律:基线未给 length/items 时不判。项数差由 length 覆盖,逐项只比交集长度内的项,避免越界。
+ */
+function diffCollection(target, base, mim, out) {
+  if (base.length !== undefined && mim.length !== undefined && base.length !== mim.length) {
+    out.push(entry(target, null, 'collection.length', 'TELL', base.length, mim.length));
+  }
+  const bItems = base.items || [];
+  const mItems = mim.items || [];
+  const n = Math.min(bItems.length, mItems.length);
+  for (let i = 0; i < n; i++) {
+    for (const f of Object.keys(bItems[i] || {})) {
+      if (mItems[i][f] === undefined) continue;
+      if (bItems[i][f] !== mItems[i][f]) {
+        out.push(entry(target, `[${i}].${f}`, 'collection.item', 'TELL', bItems[i][f], mItems[i][f]));
+      }
+    }
+  }
+}
+
 /** 比对一个 object target。complete 决定是否判定 EXTRA / ownKeys 顺序。 */
 function diffObject(target, base, mim, complete, out) {
   if (base.tag !== undefined && mim.tag !== undefined && base.tag !== mim.tag) {
@@ -116,6 +138,8 @@ function diffObject(target, base, mim, complete, out) {
     const mSym = mim.symbolKeys || [];
     for (const s of mSym) if (!bSym.includes(s)) out.push(entry(target, s, 'symbolKey', 'EXTRA', 'absent', 'present'));
   }
+  // 集合值级比对独立于 complete:length/项字段是值真相,部分基线下也该守(基线给了才比)。
+  if (base.collection && mim.collection) diffCollection(target, base.collection, mim.collection, out);
 }
 
 /**
