@@ -11,11 +11,15 @@
  * (集合正确性见 diff 的 sameSet),本 pass 只改顺序。
  *
  * 覆盖面与机制边界:本 pass 是**后置重排**,delete 后重建的键必然 append 到残留键之后,故仅适用于"全
- * configurable"的原型(Navigator.prototype ✓、HTMLDivElement.prototype ✓)。Node/Event.prototype 做不到:真机序里
- * configurable accessors 排在 non-configurable WebIDL 常量(ELEMENT_NODE… / CAPTURING_PHASE…)**之前**,但 jsdom 把
- * 常量冻结在末尾删不动,后置重排插不到其前 —— 须在 jsdom 原型构造期拦截(更深的技术,本 pass 不覆盖)。
- * DOM 原型真机序 host 无关(同内核)→ 共用一张;Navigator 因 host 门控键集而异 → per-host。
+ * configurable"的原型(Navigator/HTMLDivElement/Document/Element/HTMLElement/EventTarget.prototype ✓,均实测
+ * 零 non-configurable own 键)。Node/Event.prototype 做不到:真机序里 configurable accessors 排在
+ * non-configurable WebIDL 常量(ELEMENT_NODE… / CAPTURING_PHASE…)**之前**,但 jsdom 把常量冻结在末尾删不动,
+ * 后置重排插不到其前 —— 须在 jsdom 原型构造期拦截(更深的技术,本 pass 不覆盖)。
+ * host 轴:事件处理器密集的 Document/HTMLElement.prototype 真机序**随 host 而异**(实测 chrome-v143 vs
+ * webview-v138 共享键 100+ 处错位)→ per-host 表;Element.prototype 序 host 无关(实测共享序一致)→ 单表;
+ * Navigator 因 host 门控键集而异 → per-host。大表逐字提取于 ./keyorder-data(见该文件)。
  */
+import { ELEMENT_ORDER, DOCUMENT_ORDER, HTML_ELEMENT_ORDER } from './keyorder-data.js';
 
 // Navigator.prototype 真机 getOwnPropertyNames 序。键集随 host 门控而异 —— 用注入侧同一条 host 轴选择。
 const NAVIGATOR_ORDER = {
@@ -66,5 +70,13 @@ export default {
     if (navOrder) mask.reorderOwnKeys(window.Navigator.prototype, navOrder);
     mask.reorderOwnKeys(window.HTMLDivElement.prototype, HTML_DIV_ELEMENT_ORDER);
     mask.reorderOwnKeys(window.EventTarget.prototype, EVENT_TARGET_ORDER);
+    // domproto 补全 Document/Element/HTMLElement.prototype 键集 → 激活 order 检测,据真机序重排(per-host)。
+    // 仅在对应真机基线键集与 mimic 注入集相等时该原型 order 才被检视(更高版本因键集漂移而休眠,见 keyorder-data)。
+    const elOrder = ELEMENT_ORDER[traits.host];
+    if (elOrder) mask.reorderOwnKeys(window.Element.prototype, elOrder);
+    const docOrder = DOCUMENT_ORDER[traits.host];
+    if (docOrder) mask.reorderOwnKeys(window.Document.prototype, docOrder);
+    const htmlOrder = HTML_ELEMENT_ORDER[traits.host];
+    if (htmlOrder) mask.reorderOwnKeys(window.HTMLElement.prototype, htmlOrder);
   },
 };
