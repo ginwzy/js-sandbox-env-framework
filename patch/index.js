@@ -11,6 +11,8 @@ import navigator from './navigator.js';
 import uadata from './uadata.js';
 import plugins from './plugins.js';
 import screen from './screen.js';
+import viewport from './viewport.js';
+import timezone from './timezone.js';
 import chrome from './chrome.js';
 import touch from './touch.js';
 import canvas from './canvas.js';
@@ -23,4 +25,4 @@ import eventtarget from './eventtarget.js';
 import domproto from './domproto.js';
 import keyorder from './keyorder.js';
 
-export const patches = [windowPatch, globals, stack, symbol, navigator, uadata, plugins, screen, chrome, touch, canvas, webgl, audio, clock, performance, protochain, eventtarget, domproto, keyorder];
+export const patches = [windowPatch, globals, stack, symbol, navigator, uadata, plugins, screen, viewport, timezone, chrome, touch, canvas, webgl, audio, clock, performance, protochain, eventtarget, domproto, keyorder];
