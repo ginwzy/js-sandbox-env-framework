@@ -8,10 +8,11 @@
  *   - canvas / audio / fonts:mimic 标 fidelity:absent(渲染类,未回放)→ 报「未回放(设计如此)」,
  *     其真值留在 collect1,是日后键到检测器实际探针时的回放源/校验目标,不计入本轮失分。
  *
- * 用法:
- *   node fp_env_verify.mjs                         # 验证所有 android-chrome-* profile
- *   node fp_env_verify.mjs android-chrome-sm-a556b-v139
- *   FP_ENV_DIR=/path node fp_env_verify.mjs --verbose
+ * 用法(语料目录为必填绝对路径参数,取 ground truth):
+ *   node fp_env_verify.mjs /abs/path/to/fp_env                 # 池等距抽样验证(默认 40 条)
+ *   node fp_env_verify.mjs /abs/path/to/fp_env --all           # 验全池
+ *   node fp_env_verify.mjs /abs/path/to/fp_env --sample 100
+ *   node fp_env_verify.mjs /abs/path/to/fp_env android-chrome/sm-a556b-v139-11387 --verbose
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,11 +21,18 @@ import { Realm } from './core/realm.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
-const FP_ENV_DIR = process.env.FP_ENV_DIR || argv.find((a) => a.startsWith('/'))
-  || '/Users/zion/projects/work/node_akamai/fp_env';
+const FP_ENV_DIR = argv.find((a) => a.startsWith('/')); // 语料目录:取 ground truth,显式给(必填)
 const PROFILES_DIR = path.join(__dirname, 'profiles');
+const POOL_DIR = path.join(PROFILES_DIR, 'android-chrome');
 const VERBOSE = argv.includes('--verbose');
-const named = argv.filter((a) => !a.startsWith('-') && !a.startsWith('/'));
+const ALL = argv.includes('--all');
+const SAMPLE = (() => { const i = argv.indexOf('--sample'); return i >= 0 ? Number(argv[i + 1]) : 40; })();
+const named = argv.filter((a) => !a.startsWith('-') && !a.startsWith('/') && !/^\d+$/.test(a));
+
+if (!FP_ENV_DIR) {
+  console.error('用法:node fp_env_verify.mjs /abs/path/to/fp_env [profile…] [--all|--sample N] [--verbose]\n需把 fp_env 采集目录作为绝对路径参数传入(取每个 profile 的 meta.captureFile 作真值对照)。');
+  process.exit(1);
+}
 
 // collect.js 的 WebGL KEYS —— 与采集侧同集,确保对账口径一致。
 const WEBGL_KEYS = [
@@ -152,11 +160,16 @@ async function verifyOne(profileName) {
 async function main() {
   let names = named;
   if (!names.length) {
-    names = fs.readdirSync(PROFILES_DIR)
-      .filter((f) => /^android-chrome-.*\.json$/.test(f))
-      .map((f) => f.replace(/\.json$/, ''));
+    const all = fs.readdirSync(POOL_DIR).filter((f) => f.endsWith('.json'))
+      .map((f) => `android-chrome/${f.replace(/\.json$/, '')}`).sort();
+    if (!ALL && all.length > SAMPLE) {
+      // 跨排序列表等距抽样(非前 N)→ 覆盖机型/时区/locale 多样性,几十条即足证映射均匀正确。
+      const stride = all.length / SAMPLE;
+      names = Array.from({ length: SAMPLE }, (_, i) => all[Math.floor(i * stride)]);
+      console.log(`池 ${all.length} 条,等距抽样 ${names.length}(--all 验全量)\n`);
+    } else { names = all; }
   }
-  if (!names.length) { console.error('无 android-chrome-* profile,先跑 fp_env_adapt.mjs'); process.exit(1); }
+  if (!names.length) { console.error('无 profiles/android-chrome/ profile,先跑 fp_env_adapt.mjs'); process.exit(1); }
 
   let gTotal = 0, gOk = 0; const perfect = [];
   for (const name of names) {
@@ -167,7 +180,7 @@ async function main() {
     const rate = res.total ? ((res.ok / res.total) * 100).toFixed(1) : '0';
     const mark = res.fails.length ? '✗' : '✓';
     if (!res.fails.length) perfect.push(name);
-    console.log(`  ${mark} ${name.padEnd(36)} ${res.ok}/${res.total} (${rate}%)`);
+    console.log(`  ${mark} ${name.padEnd(44)} ${res.ok}/${res.total} (${rate}%)`);
     if (res.fails.length && (VERBOSE || names.length === 1)) {
       for (const f of res.fails.slice(0, 30)) {
         console.log(`      ${f.section}.${f.key}: 回放=${JSON.stringify(f.got)} 真机=${JSON.stringify(f.want)}`);

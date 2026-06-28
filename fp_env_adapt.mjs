@@ -1,9 +1,12 @@
 /**
- * fp_env(Akamai sensor 采集)→ mimic profile 适配器。
+ * fp_env(Akamai sensor 采集)→ mimic profile 身份池导入器。
  *
- * fp_env 是扁平 Akamai 形;mimic capture 衍生 profile 是嵌套自包含形(整段来自单次
- * 采集,见 profiles/android-webview-v138.json)。本脚本做 schema 重映射 + 设备去重选代表机,
- * 落 host=chrome 的 android 移动版 Chrome profile。
+ * 定位:这批 z__env 是「真机环境身份池」(运行时挑一条来伪装),不是一次性种子。本脚本把每条
+ * **不同身份**清洗成 mimic 原生 profile,落 profiles/android-chrome/ 子目录、入库;之后运行时只认仓内
+ * profiles/,fp_env 原始目录不再参与运行(故路径是导入时的命令行参数,非运行时依赖)。
+ *
+ * 身份去重按**完整指纹**(只剔真重复)—— 同机型的不同 locale/时区/屏幕/补丁版本都是独立身份,
+ * 正是池价值所在;按机型去重会丢这层多样性,故不做。
  *
  * 数据底层完全对得上(已实测):
  *  - collect1.getParameter_info[0] 与 mimic webgl.parameters 同为 GL enum 数字键
@@ -11,34 +14,37 @@
  *  - userAgentData.HighEntropyValues 拍平即 collect.js 的 userAgentData 形。
  *  - Date.TimezoneOffset 为真机采集 offset;Intl.Timezone 为 IANA 名。
  *
- * 缺口(fp_env 未采,各有兜底):
- *  - window.chrome 存在性:不写该键 → host=chrome 走 UA 兜底校验;patch/chrome 自行合成。
+ * 入库范围 = mimic 当前能回放的标量身份段(navigator+UA-CH / screen / window / timezone / webgl 参数表)。
+ * 渲染类(canvas/fonts 图像、webgl 图)当前 mimic 不回放(canvas/audio patch 为 stub),不入库;需要时
+ * 另起语料目录保留 collect1 真值。各兜底:
+ *  - window.chrome 存在性:fp_env 未采 → 不写该键,host=chrome 走 UA 兜底校验,patch/chrome 合成。
  *  - navigator.vendor/cookieEnabled:移动 Chrome 固定值,补默认。
- *  - canvas/audio/fonts:渲染类,标 absent(同 mimic capture 约定);其真值留在 collect1 作校验用。
  *
- * 用法:
- *   node fp_env_adapt.mjs                 # 默认选 top-24 高频机型写入 profiles/
- *   FP_ENV_DIR=/path node fp_env_adapt.mjs --limit 40
- *   node fp_env_adapt.mjs --all           # 全部 393 个唯一 (model×版本) 组合
- *   node fp_env_adapt.mjs --dry           # 只跑映射+validate,不落盘
+ * 用法(语料目录为必填的绝对路径参数):
+ *   node fp_env_adapt.mjs /abs/path/to/fp_env            # 全量不同身份 → profiles/android-chrome/
+ *   node fp_env_adapt.mjs /abs/path/to/fp_env --limit 50 # 只导前 50 条(冒烟用)
+ *   node fp_env_adapt.mjs /abs/path/to/fp_env --dry      # 只跑映射+validate,不落盘
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Profile } from './core/profile.js';
+import { deriveTraits } from './capture/derive.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const argv = process.argv.slice(2);
-const FP_ENV_DIR = process.env.FP_ENV_DIR || argv.find((a) => a.startsWith('/'))
-  || '/Users/zion/projects/work/node_akamai/fp_env';
-const OUT_DIR = path.join(__dirname, 'profiles');
-const ALL = argv.includes('--all');
+const FP_ENV_DIR = argv.find((a) => a.startsWith('/')); // 语料目录:导入时显式给,不写死、不走 env
+const OUT_DIR = path.join(__dirname, 'profiles', 'android-chrome');
 const DRY = argv.includes('--dry');
-const LIMIT = (() => { const i = argv.indexOf('--limit'); return i >= 0 ? Number(argv[i + 1]) : 24; })();
+const LIMIT = (() => { const i = argv.indexOf('--limit'); return i >= 0 ? Number(argv[i + 1]) : Infinity; })();
+
+if (!FP_ENV_DIR) {
+  console.error('用法:node fp_env_adapt.mjs /abs/path/to/fp_env [--limit N] [--dry]\n需把 fp_env 采集目录作为绝对路径参数传入。');
+  process.exit(1);
+}
 
 const DEFAULT_VENDOR = 'Google Inc.';
-
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /** 从 IANA 时区名算 getTimezoneOffset 风格分钟数(west 为正),作 Date.TimezoneOffset 缺时兜底。 */
@@ -55,8 +61,8 @@ function tzOffsetMinutes(timeZone, ms) {
   } catch { return undefined; }
 }
 
-/** fp_env 单文件 → mimic profile(扁平自包含,镜像 android-webview-v138.json)。 */
-function fpToProfile(d, captureFile) {
+/** fp_env 单文件 → mimic profile(自包含,镜像 profiles/android-webview-v138.json 形)。 */
+function fpToProfile(d, captureFile, id) {
   const n = d.navigator || {};
   const hev = (n.userAgentData && n.userAgentData.HighEntropyValues) || {};
   const ua = n.userAgent || '';
@@ -131,61 +137,77 @@ function fpToProfile(d, captureFile) {
     };
   }
 
-  const name = ['android-chrome', model ? slug(model) : `gpu-${slug(webgl?.unmaskedRenderer || 'unknown')}`, `v${major}`].join('-');
+  // 命名:<机型>-v<主版本>-<z__env id>。同机型多身份靠 id 区分并可溯源回采集文件。带子目录前缀作 load 键。
+  const base = [model ? slug(model) : `gpu-${slug(webgl?.unmaskedRenderer || 'unknown')}`, `v${major}`, id].join('-');
+  const name = `android-chrome/${base}`;
   const meta = {
     source: 'fp_env-akamai',
-    captureFile, // 配对的真机采集文件名 —— 供 fp_env_verify.mjs 取 collect1 ground truth
+    captureFile, // 配对真机采集文件名 —— 供 fp_env_verify.mjs 取 ground truth
     hygiene: { devicePixelRatio: d.devicePixelRatio, issues: [] },
     fidelity: {
       navigator: 'real', screen: 'real', window: 'real', timezone: 'real',
       webgl: webgl ? 'params' : 'absent',
       canvas: 'absent', audio: 'absent', fonts: 'absent',
     },
-    traits: { engine: 'chromium', platform: 'android', formFactor: 'mobile', host: 'chrome', version: major },
+    // traits 用项目自有派生(单一真相源):platform/formFactor/host/version 从 UA + window 推,
+    // 不硬编码 —— 否则平板(UA 无 Mobile)被误标 mobile 而 validate 失败。host 经 detectHost:
+    // window 无 chrome 键 + 有 userAgentData → chrome。
+    traits: deriveTraits({ navigator, window }),
     name,
   };
 
   const profile = { meta, navigator, screen, window, timezone };
   if (webgl) profile.webgl = webgl;
-  return profile;
+  return { profile, base };
 }
+
+/** 身份段序列化(去 meta)—— 完整指纹去重键:同身份不同采集文件 → 一条。 */
+const identityKey = (p) => JSON.stringify({ navigator: p.navigator, screen: p.screen, window: p.window, timezone: p.timezone, webgl: p.webgl });
 
 async function main() {
   const files = fs.readdirSync(FP_ENV_DIR).filter((f) => /^z__env_.*\.json$/.test(f));
   if (!files.length) { console.error(`无 z__env_*.json:${FP_ENV_DIR}`); process.exit(1); }
 
-  // 去重:按 (model, Chrome major),首见留存 + 计数。
-  const byKey = new Map();
+  // 按完整指纹去重,首见留存。
+  const distinct = new Map(); // identityKey → {profile, base}
+  let dupes = 0;
   for (const f of files) {
+    const id = (f.match(/^z__env_(.+)\.json$/) || [])[1];
     let d;
     try { d = JSON.parse(fs.readFileSync(path.join(FP_ENV_DIR, f), 'utf-8')); } catch { continue; }
-    const n = d.navigator || {};
-    const hev = (n.userAgentData && n.userAgentData.HighEntropyValues) || {};
-    const major = (n.userAgent || '').match(/Chrom(?:e|ium)\/(\d+)/);
-    const key = `${hev.model || '(empty)'}|v${major ? major[1] : '?'}`;
-    if (!byKey.has(key)) byKey.set(key, { file: f, data: d, model: hev.model || '', count: 0 });
-    byKey.get(key).count++;
+    const { profile, base } = fpToProfile(d, f, id);
+    const k = identityKey(profile);
+    if (distinct.has(k)) { dupes++; continue; }
+    distinct.set(k, { profile, base });
   }
 
-  let reps = [...byKey.values()].sort((a, b) => b.count - a.count);
-  if (!ALL) reps = reps.filter((r) => r.model).slice(0, LIMIT); // 具名机型,top-N
+  let reps = [...distinct.values()];
+  if (Number.isFinite(LIMIT)) reps = reps.slice(0, LIMIT);
 
-  console.log(`扫描 ${files.length} 文件 → ${byKey.size} 唯一 (model×版本);生成 ${reps.length} 个 profile${DRY ? ' [dry-run]' : ''}\n`);
+  console.log(`扫描 ${files.length} 文件 → ${distinct.size} 个不同身份(剔 ${dupes} 真重复);处理 ${reps.length}${DRY ? ' [dry-run]' : ''}`);
+
+  if (!DRY) { fs.rmSync(OUT_DIR, { recursive: true, force: true }); fs.mkdirSync(OUT_DIR, { recursive: true }); }
 
   let ok = 0; const problems = [];
-  for (const r of reps) {
-    const prof = fpToProfile(r.data, r.file);
-    const issues = (await Profile.load(prof)).validate();
-    const tag = issues.length ? `✗ ${issues.join('; ')}` : '✓';
-    const gpu = prof.webgl?.unmaskedRenderer || '(no webgl)';
-    console.log(`  ${tag.padEnd(2)} ${prof.meta.name.padEnd(34)} ${String(r.count).padStart(3)}×  ${gpu}`);
-    if (issues.length) { problems.push({ name: prof.meta.name, issues }); continue; }
-    if (!DRY) fs.writeFileSync(path.join(OUT_DIR, `${prof.meta.name}.json`), JSON.stringify(prof, null, 2));
+  const tz = new Set(); const langs = new Set(); const models = new Set(); const gpus = new Set();
+  for (const { profile, base } of reps) {
+    const issues = (await Profile.load(profile)).validate();
+    if (issues.length) { problems.push({ base, issues }); continue; }
+    if (!DRY) fs.writeFileSync(path.join(OUT_DIR, `${base}.json`), JSON.stringify(profile, null, 2));
     ok++;
+    tz.add(profile.timezone.timeZone);
+    langs.add((profile.navigator.languages || []).join(','));
+    models.add(profile.navigator.userAgentData.model || '(empty)');
+    gpus.add(profile.webgl?.unmaskedRenderer || '(none)');
   }
 
-  console.log(`\n${DRY ? '校验通过' : '已写入'} ${ok}/${reps.length}${problems.length ? `;${problems.length} 个 validate 失败` : ''}`);
-  if (problems.length) process.exitCode = 2;
+  console.log(`${DRY ? '校验通过' : `已写入 profiles/android-chrome/`} ${ok}/${reps.length}`);
+  console.log(`多样性:${models.size} 机型 · ${tz.size} 时区 · ${langs.size} locale · ${gpus.size} GPU`);
+  if (problems.length) {
+    console.log(`\n${problems.length} 条 validate 失败(示例):`);
+    for (const p of problems.slice(0, 10)) console.log(`  ✗ ${p.base}: ${p.issues.join('; ')}`);
+    process.exitCode = 2;
+  }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
