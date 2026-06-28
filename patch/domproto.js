@@ -7,6 +7,8 @@
  * 实现一律箭头(无 .prototype,真机 native 亦无)。返回值/默认值保真非本切片目标 —— L1 diff 只验形态,
  * 行为取安全默认(getAnimations→[]、checkVisibility→true、Promise 类取永久 pending、on* 默认 null、只读态
  * 取保守值);this 依赖的真实语义(getHTML 序列化 / scroll 实际滚动 / 反射属性回写 attribute)留后续。
+ * 例外:少数可写反射属性 null 默认会在 init 阶段被正常使用触发**抛错**,经 mask.reflectAccessor 取非 null
+ * 默认防抛 —— 见下方 CRASHER 子集块(策略只在该处讲全)。
  *
  * ownKeys.order 与切片边界:L1 diff 的 order tell 仅在两侧键集**相等**时触发(见 diff.js sameSet)。补成员
  * 令对应原型键集补全 → 激活 order 检测 → 须在 keyorder 注册真机序。本 patch 补全 EventTarget.prototype
@@ -26,7 +28,7 @@ export default {
   after: ['window'],
   apply({ window, mask, traits }) {
     const W = window;
-    const { method, accessor, eventHandler, adopt, pending } = mask;
+    const { method, accessor, eventHandler, reflectAccessor, adopt, pending, tag, native } = mask;
     // 每个 impl 必须是**独立**函数对象:mask.fn 原地改写 name/length,共享一个引用会令后注册的方法
     // 覆盖前者的 name/length(全指向同一被改写对象)。故下方一律内联新箭头,勿抽公共 const 复用。
 
@@ -169,10 +171,52 @@ export default {
       ['isContentEditable', () => false],
     ];
 
+    // ── CRASHER 子集:可写反射属性的非 null 默认 ────────────────────────────────
+    // 上面 GETSET 名单经 eventHandler 统一默认 null;对 ~80 个 on* 处理器 null 正确,但少数可写反射 IDL
+    // 属性 null 默认会在页面 init 正常使用时**抛**(for...of/.trim()/.add() 于 null),在 sensor 运行前
+    // 中断执行。下表把这几个键分流到 mask.reflectAccessor(形态同 eventHandler,仅默认值改为正确类型)。
+    // 键名在 Document/Element/HTMLElement 原型上唯一,故按名匹配即可,无需区分 host 原型。
+
+    // part 默认值:DOMTokenList 壳(shadow part)。own 安全方法是**必须**的 —— 即便 reparent 到真机
+    // DOMTokenList.prototype 拿 instanceof,继承来的 jsdom 原型方法会在无内部 slot 的壳上触发 brand-check
+    // 抛错,故每个被访问成员都以 own 覆盖。单例共享(以稳为主:per-instance 身份 / 真实 token 集留后续)。
+    let partShellInstance;
+    const partShell = () => {
+      if (partShellInstance) return partShellInstance;
+      const shell = adopt({ length: 0, value: '' });
+      if (W.DOMTokenList) { try { Object.setPrototypeOf(shell, W.DOMTokenList.prototype); } catch { /* noop */ } }
+      tag(shell, 'DOMTokenList');
+      method(shell, 'item', 1, () => null);
+      method(shell, 'contains', 1, () => false);
+      method(shell, 'add', 1, () => undefined);
+      method(shell, 'remove', 1, () => undefined);
+      method(shell, 'toggle', 1, () => false);
+      method(shell, 'replace', 2, () => false);
+      method(shell, 'supports', 1, () => false);
+      method(shell, 'forEach', 1, () => undefined);
+      Object.defineProperty(shell, Symbol.iterator, {
+        value: native(function () { return [][Symbol.iterator](); }, 'values', 0),
+        writable: true, enumerable: false, configurable: true,
+      });
+      partShellInstance = shell;
+      return shell;
+    };
+
+    // getDefault 以 this=实例 调用(reflectAccessor 的 getter 经 get-syntax 取得,可绑 this 且无 .prototype):
+    // innerText/outerText 默认取实例 textContent;adoptedStyleSheets/part 不依赖实例,用箭头。
+    const reflectDefaults = {
+      adoptedStyleSheets: () => [],
+      innerText() { return this.textContent ?? ''; },
+      outerText() { return this.textContent ?? ''; },
+      part: () => partShell(),
+    };
+
     const installGetSet = (proto, names) => {
       for (const name of names) {
         if (hasOwn.call(proto, name)) continue;
-        eventHandler(proto, name);
+        const getDefault = reflectDefaults[name];
+        if (getDefault) reflectAccessor(proto, name, getDefault); // 非 null 默认(crasher 防抛)
+        else eventHandler(proto, name);                          // on* 等:默认 null(真机正确)
       }
     };
     const installGetOnly = (proto, table) => {

@@ -373,6 +373,27 @@ export function createMask(window) {
     return target;
   }
 
+  /**
+   * 可写反射 IDL 属性访问器(get+set,带**非 null** 默认)。区别 eventHandler(默认恒 null,对 on* 正确):
+   * 少数可写反射属性真机默认是具体类型值(adoptedStyleSheets→数组 / innerText/outerText→string / part→
+   * DOMTokenList),null 默认会在页面 init 正常 for...of / .trim() / .add() 时抛 —— 在 sensor 运行前中断执行
+   * (正是 base/jsdom 裸 VirtualConsole 静默吞异步错误所放大的盲态)。形态逐字段同 eventHandler(get 'get X'/0、
+   * set 'set X'/1、native、enumerable+configurable),故 L1 形态零变化。
+   * getter 经 **get-syntax** 取得(`{ get [name](){} }`):既无 own .prototype(普通 function expr 有,且
+   * non-configurable 删不掉 → DOM 原型被 L1 probe 扫即结构 tell;真机 native getter 亦无),又能绑 this(箭头
+   * 不能)→ getDefault 可读实例态(如 innerText 取 this.textContent)。set no-op:真实回写 attribute 语义留
+   * 后续,no-op 即满足"不抛"(setter.call(null) 仍抛 Illegal invocation,真机同此,不另守)。
+   */
+  function reflectAccessor(target, name, getDefault) {
+    const getter = Object.getOwnPropertyDescriptor({ get [name]() { return adopt(getDefault.call(this)); } }, name).get;
+    Object.defineProperty(target, name, {
+      get: native(getter, `get ${name}`, 0),
+      set: native(() => {}, `set ${name}`, 1),
+      enumerable: true, configurable: true,
+    });
+    return target;
+  }
+
   /** 全局装一次:覆盖 window 的 Function.prototype.toString(纵深防御)。 */
   function boot() {
     fn(nativeToString, 'toString');
@@ -395,7 +416,7 @@ export function createMask(window) {
 
   return {
     fn, native, dropOwnToString, wrap, wrapAccessor, deproto, hook, tag,
-    iface, ctorIface, singleton, method, methods, accessor, accessors, instAccessor, instAccessors, eventHandler, mixin, adopt, boot,
+    iface, ctorIface, singleton, method, methods, accessor, accessors, instAccessor, instAccessors, eventHandler, reflectAccessor, mixin, adopt, boot,
     promise, pending, reorderOwnKeys, markCtorProto, finalizeIfaces, eventTargetProto, isBrandlessEventTarget,
   };
 }
