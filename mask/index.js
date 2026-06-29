@@ -17,6 +17,8 @@
  *   deproto  —— 同 wrap,但换掉函数对象以消残留 .prototype(根因见该函数)。
  * 共用尾 dropOwnToString:reparent 落地则删 fn 写入的 own toString(真 native 方法无 own toString,从
  * Function.prototype 继承);未落地则保留 own toString 兜底,避免源码泄漏。
+ *
+ * 原语补全与 patch 层去冗余的背景分析见 docs/spec/mask-primitive-consolidation.md(本头注是活的权威分工)。
  */
 
 const origToString = Function.prototype.toString;

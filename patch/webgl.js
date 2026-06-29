@@ -91,7 +91,8 @@ export default {
     setupProto(webgl1.proto);
     setupProto(webgl2.proto);
 
-    // getContext 接管:同一 canvas 同 type 返回同一 context(真机[实测]单例语义);webgl/webgl2 外 delegate(2d 等不动)。
+    // getContext 接管:同一 canvas 同 type 返回同一 context(真机[实测]单例语义);webgl/webgl2 外 delegate
+    // (2d 等不动)。为何须 delegate 未知 type:多 patch 共 hook 同一 getContext、拓扑序未定 —— 协作契约见 canvas。
     const cache1 = new WeakMap(); const cache2 = new WeakMap();
     const ctxFor = (canvas, reg, cache) => {
       let c = cache.get(canvas);
