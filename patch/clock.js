@@ -37,13 +37,13 @@ export default {
     const baseNow = t.now ?? Date.now();
 
     if (nowSeq) {
-      window.Date.now = mask.fn(function now() {
+      window.Date.now = mask.native(() => {
         if (nowIdx < nowSeq.length) return nowSeq[nowIdx++];
         return nowSeq[nowSeq.length - 1] + (++nowIdx - nowSeq.length);
       }, 'now');
     } else if (t.now != null) {
       const fixedNow = t.now;
-      window.Date.now = mask.fn(function now() { return fixedNow; }, 'now');
+      window.Date.now = mask.native(() => fixedNow, 'now');
     }
 
     // ── new Date() 回放(零参数构造) ───────────────────────────────────────────
@@ -94,12 +94,10 @@ export default {
         x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
         return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
       };
-      window.Math.random = mask.fn(function random() {
-        return randIdx < randSeq.length ? randSeq[randIdx++] : mulberry();
-      }, 'random');
+      window.Math.random = mask.native(() => (randIdx < randSeq.length ? randSeq[randIdx++] : mulberry()), 'random');
     } else if (t.seed != null) {
       let s = t.seed >>> 0;
-      window.Math.random = mask.fn(function random() {
+      window.Math.random = mask.native(() => {
         s |= 0; s = (s + 0x6d2b79f5) | 0;
         let x = Math.imul(s ^ (s >>> 15), 1 | s);
         x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;

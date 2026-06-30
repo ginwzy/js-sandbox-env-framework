@@ -14,7 +14,7 @@ export default {
     // 页面来源:http(s)/data/blob/about 协议,或空 fileName(page 内 eval/匿名帧)。其余皆宿主帧。
     const isPageFrame = (file) => !file || /^(?:https?|data|blob|about):/.test(file);
 
-    const prepareStackTrace = mask.fn(function prepareStackTrace(error, frames) {
+    const prepareStackTrace = mask.native((error, frames) => {
       const name = (error && error.name) || 'Error';
       const message = error && error.message;
       // 真机[实测].stack 首行剥 `Failed to construct '<Name>': ` 前缀(V8 行为),此处复刻。
