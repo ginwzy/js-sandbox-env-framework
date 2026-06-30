@@ -5,8 +5,8 @@
  * 原型上的只读 accessor(同 width/height,经 mask.mixin 装在原型)。orientation 返回 ScreenOrientation
  * 单例:继承 EventTarget、type/angle 自 profile.screen.orientation、onchange 可写。
  *
- * 边界:Screen.prototype 真机还有 onchange / isExtended 两键 + own 键序(constructor 在末位),属另两轴
- * (事件处理器 / 键序),本补丁不动 —— 故 Screen.prototype own 键集仍与真机不等,不触发 ownKeys.order 比较。
+ * onchange(事件处理器)/ isExtended(只读 bool,多屏扩展态)补全键集;own 键序由 patch/keyorder 统一重排
+ * (真机 constructor 在 orientation 后、onchange/isExtended 前)。
  */
 export default {
   name: 'screen',
@@ -37,5 +37,11 @@ export default {
       availTop: () => p.availTop ?? 0,
       orientation: () => orientation,
     });
+
+    // 真机[实测]Screen.prototype 另有 onchange(事件处理器)/ isExtended(只读 bool,单屏 false)两键,
+    // 排在 constructor 之后;键序由 patch/keyorder 的 SCREEN_ORDER 统一重排。
+    const sproto = window.Screen.prototype;
+    mask.eventHandler(sproto, 'onchange');
+    mask.accessor(sproto, 'isExtended', () => false);
   },
 };

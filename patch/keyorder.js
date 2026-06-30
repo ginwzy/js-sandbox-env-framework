@@ -58,18 +58,23 @@ const HTML_DIV_ELEMENT_ORDER = ['align', 'constructor'];
 // dispatchEvent/removeEventListener 排反、且 append 的 when 落末位(真机 when 在 constructor 前)。
 // 全 configurable(webidl2js 方法 + when),后置重排可行。
 const EVENT_TARGET_ORDER = ['addEventListener', 'dispatchEvent', 'removeEventListener', 'when', 'constructor'];
+// Screen.prototype:screen 补 availLeft/availTop/orientation/onchange/isExtended 后键集补全。host 无关
+// (webview/linux 实测同序);全 configurable(jsdom + 补的 accessor/handler),后置重排可行。真机 constructor
+// 不在末位 —— onchange/isExtended 排其后,故须显式 order(非 finalizeIfaces 的 constructor 末位规则)。
+const SCREEN_ORDER = ['availWidth', 'availHeight', 'width', 'height', 'colorDepth', 'pixelDepth', 'availLeft', 'availTop', 'orientation', 'constructor', 'onchange', 'isExtended'];
 
 export default {
   name: 'keyorder',
   // after window:DOM 原型方法/访问器由 window sweep native 化,须在其后捕获最终描述符。
   // after navigator/uadata/plugins:Navigator.prototype 键由三者共同贡献,须等键集齐备。
   // after domproto:EventTarget.prototype.when 须先补齐再重排(否则 order 缺 when)。
-  after: ['window', 'navigator', 'uadata', 'plugins', 'domproto'],
+  after: ['window', 'navigator', 'uadata', 'plugins', 'domproto', 'screen'],
   apply({ window, mask, traits }) {
     const navOrder = NAVIGATOR_ORDER[traits.host];
     if (navOrder) mask.reorderOwnKeys(window.Navigator.prototype, navOrder);
     mask.reorderOwnKeys(window.HTMLDivElement.prototype, HTML_DIV_ELEMENT_ORDER);
     mask.reorderOwnKeys(window.EventTarget.prototype, EVENT_TARGET_ORDER);
+    mask.reorderOwnKeys(window.Screen.prototype, SCREEN_ORDER);
     // domproto 补全 Document/Element/HTMLElement.prototype 键集 → 激活 order 检测,据真机序重排(per-host)。
     // 仅在对应真机基线键集与 mimic 注入集相等时该原型 order 才被检视(更高版本因键集漂移而休眠,见 keyorder-data)。
     const elOrder = ELEMENT_ORDER[traits.host];
