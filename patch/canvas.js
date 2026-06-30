@@ -118,17 +118,13 @@ export default {
     const ctxCanvas = new WeakMap(); // 2d context → 关联 <canvas>
     mask.instAccessor(crc2d.proto, 'canvas', function () { return ctxCanvas.get(this) || null; });
 
-    // getContext 接管:'2d' 返回单例 context;非 '2d' delegate(多 patch 共 hook getContext,须互相 delegate)。
     const cache = new WeakMap();
     const ctxFor = (canvas) => {
       let c = cache.get(canvas);
       if (!c) { c = crc2d.create({}); ctxCanvas.set(c, canvas); cache.set(canvas, c); }
       return c;
     };
-    mask.hook(window.HTMLCanvasElement.prototype, 'getContext', (orig) => function getContext(type, attrs) {
-      if (type === '2d') return ctxFor(this);
-      return orig.call(this, type, attrs);
-    });
+    mask.registerContext('2d', (canvas) => ctxFor(canvas));
 
     // toDataURL:jsdom 返回 null(真机绝不为 null)→ 按请求 type 返自洽占位串(复刻 type→MIME 映射)。
     mask.hook(window.HTMLCanvasElement.prototype, 'toDataURL', () => function toDataURL(type) { return placeholderFor(type); });

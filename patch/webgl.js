@@ -78,17 +78,14 @@ export default {
     setupProto(webgl1.proto);
     setupProto(webgl2.proto);
 
-    // getContext 接管:同一 canvas 同 type 返回单例(真机[实测]);非 webgl delegate(协作契约见 canvas)。
     const cache1 = new WeakMap(); const cache2 = new WeakMap();
     const ctxFor = (canvas, reg, cache) => {
       let c = cache.get(canvas);
       if (!c) { c = reg.create({}); ctxCanvas.set(c, canvas); cache.set(canvas, c); }
       return c;
     };
-    mask.hook(window.HTMLCanvasElement.prototype, 'getContext', (orig) => function getContext(type, attrs) {
-      if (type === 'webgl2') return ctxFor(this, webgl2, cache2);
-      if (type === 'webgl' || type === 'experimental-webgl') return ctxFor(this, webgl1, cache1);
-      return orig.call(this, type, attrs);
-    });
+    mask.registerContext('webgl', (canvas) => ctxFor(canvas, webgl1, cache1));
+    mask.registerContext('experimental-webgl', (canvas) => ctxFor(canvas, webgl1, cache1));
+    mask.registerContext('webgl2', (canvas) => ctxFor(canvas, webgl2, cache2));
   },
 };

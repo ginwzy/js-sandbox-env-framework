@@ -164,15 +164,10 @@ mask.eventTargetProto(proto)   // 一步:setPrototypeOf(proto, window.EventTarge
 **风险**:改动 `eventtarget.js` 的匹配口径(实例集 → 原型链),须用现有 screen/connection/orientation
 测试逐项回归;确认对真 EventTarget(window/document/element,其 proto 不在 brandlessProtos)仍走 orig。
 
-### B5. `getContext` 被 canvas + webgl 各 hook 一次(隐式跨文件协调,低优先)
+### B5. `getContext` 被 canvas + webgl 各 hook 一次(隐式跨文件协调,低优先) ✅ 已完成
 
-**现状**:`canvas.js:162` 与 `webgl.js:100` 都 hook `HTMLCanvasElement.prototype.getContext`,各自处理
-自己的 type、把未知 type `delegate` 给 orig。靠 `mask.hook` 幂等 + 两边都 delegate 才在任意拓扑序下正确
-(注释已说明)。能用但属隐式契约——"两边都得记得 delegate 未知 type"。
-
-**可选修法**(优先级低于 A/B4):一个轻量 type 分发注册点——某处独占 hook getContext,canvas/webgl
-经 `registerContext('2d', factory)` / `('webgl', …)` 注册,分发器按 type 查表、未命中走 orig。把隐式
-协调变显式。不做也可,至少在两处补"配对契约"交叉注释。
+**已解**:`mask.registerContext(type, factory)` — per-instance type→factory Map,首次注册时自动
+hook `HTMLCanvasElement.prototype.getContext`;canvas/webgl 各自注册而非各自 hook,消除隐式契约。
 
 ---
 

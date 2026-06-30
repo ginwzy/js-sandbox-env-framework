@@ -350,6 +350,20 @@ export function createMask(window) {
     }
   }
 
+  /** getContext 单一分发:type→factory 注册表,首次注册时自动 hook HTMLCanvasElement.prototype.getContext。 */
+  const ctxFactories = new Map();
+  let ctxHooked = false;
+  function registerContext(type, factory) {
+    ctxFactories.set(type, factory);
+    if (!ctxHooked) {
+      ctxHooked = true;
+      hook(window.HTMLCanvasElement.prototype, 'getContext', (orig) => function getContext(type, attrs) {
+        const f = ctxFactories.get(type);
+        return f ? f(this, type, attrs) : orig.call(this, type, attrs);
+      });
+    }
+  }
+
   /** window-realm Promise 壳:promise(v)=resolve / pending()=永久挂起(不 resolve 给假数据也不 reject)。 */
   const promise = (v) => window.Promise.resolve(v);
   const pending = () => new window.Promise(() => {});
@@ -357,6 +371,6 @@ export function createMask(window) {
   return {
     fn, native, dropOwnToString, wrap, wrapAccessor, deproto, hook, tag,
     iface, ctorIface, singleton, method, methods, accessor, accessors, instAccessor, instAccessors, eventHandler, reflectAccessor, mixin, adopt, boot,
-    promise, pending, reorderOwnKeys, markCtorProto, finalizeIfaces, eventTargetProto, isBrandlessEventTarget,
+    promise, pending, reorderOwnKeys, markCtorProto, finalizeIfaces, eventTargetProto, isBrandlessEventTarget, registerContext,
   };
 }
