@@ -229,5 +229,18 @@ export default {
     installGetOnly(W.Document.prototype, documentGetOnly);
     installGetOnly(W.Element.prototype, elementGetOnly);
     installGetOnly(W.HTMLElement.prototype, htmlElementGetOnly);
+
+    // Document 构造器静态方法:真机 ownNames 含 parseHTMLUnsafe(Chrome 124+, 含 WebView)。
+    // prototype non-configurable → parseHTMLUnsafe 出现在 prototype 之后(键序 warn TELL,同 Node/Event 键序轴)。
+    if (!W.Document.parseHTMLUnsafe) {
+      Object.defineProperty(W.Document, 'parseHTMLUnsafe', {
+        value: mask.fn((html) => {
+          const doc = W.document.implementation.createHTMLDocument('');
+          if (html != null) doc.documentElement.innerHTML = String(html);
+          return doc;
+        }, 'parseHTMLUnsafe', 1),
+        writable: true, configurable: true, enumerable: false,
+      });
+    }
   },
 };

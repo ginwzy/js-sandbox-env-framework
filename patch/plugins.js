@@ -1,7 +1,10 @@
 /**
  * patch/plugins —— 填充 navigator.plugins / mimeTypes(经典 headless tell:length=0)。
- * Chromium 固定集(5 plugin × 2 mimeType);门控 host=chrome(WebView 真机为空)。
+ * Chromium 固定集(5 plugin × 2 mimeType);内容填充门控 host=chrome(WebView 真机为空)。
  * 经 mask.iface 自建四类(jsdom slot 取不到 length → 不能用原生 PluginArray)。
+ *
+ * 无条件:jsdom 原生 PluginArray/MimeTypeArray 原型链 realm 对齐(WebView 模式留用 jsdom 原生空集合,
+ * 其 proto chain 终止于 Node 宿主 Object.prototype 而非 sandbox 侧,probe 的 chainOf 匹配不上 → 多尾部 null)。
  */
 import { chromeHost } from './gates.js';
 
@@ -17,8 +20,12 @@ const MIME_TYPES = [
 export default {
   name: 'plugins',
   after: ['navigator'],
-  applies: chromeHost,
-  apply({ window, mask }) {
+  apply({ window, mask, traits }) {
+    if (!chromeHost(traits)) {
+      realmAlign(window);
+      return;
+    }
+
     // 类数组:索引 own(enumerable) + named(non-enumerable)。length 在 prototype accessor(实例无 own)。
     const fillCollection = (arr, items, keyOf) => {
       items.forEach((it, i) => Object.defineProperty(arr, i, { value: it, enumerable: true, configurable: true }));
@@ -64,3 +71,21 @@ export default {
     mask.mixin(window.navigator, { plugins: () => plugins, mimeTypes: () => mimeTypes });
   },
 };
+
+/** jsdom 原生集合的原型链终止于 Node 宿主 Object.prototype → 切到 sandbox 侧。 */
+function realmAlign(window) {
+  const WOP = window.Object.prototype;
+  for (const k of ['plugins', 'mimeTypes']) {
+    let cur;
+    try { cur = window.navigator[k]; } catch { continue; }
+    for (let i = 0; cur && i < 20; i++) {
+      const parent = Object.getPrototypeOf(cur);
+      if (!parent || parent === WOP) break;
+      if (Object.getPrototypeOf(parent) === null) {
+        Object.setPrototypeOf(cur, WOP);
+        break;
+      }
+      cur = parent;
+    }
+  }
+}

@@ -94,14 +94,13 @@ export default {
       });
     }
 
-    // Notification:静态 permission/requestPermission。
-    if (typeof W.Notification !== 'function') {
+    // Notification:Chrome 有、WebView 无 → host 门控。
+    if (chromeHost(traits) && typeof W.Notification !== 'function') {
       makeCtor('Notification', 1, {
         init: (self) => { self.onclick = null; self.onclose = null; self.onerror = null; self.onshow = null; },
         methods: { close: [0, () => undefined] },
         statics: { requestPermission: [1, () => W.Promise.resolve('default')] },
       });
-      // 静态属性:permission(当前授权态)/ maxActions。
       Object.defineProperty(W.Notification, 'permission', {
         get: native(() => 'default', 'get permission'), enumerable: false, configurable: true,
       });
