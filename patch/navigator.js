@@ -112,10 +112,7 @@ function ifaceTable(mask) {
       isSessionSupported: [1, () => promise(false)], requestSession: [1, () => pending()],
     }, gate: chromeHost },
     protectedAudience: { cls: 'ProtectedAudience', methods: { queryFeatureSupport: [1, () => adopt({})] }, gate: chromeHost },
-    // mediaSession:桌面+移动 Chrome 有、WebView 无 → host 轴(异于 windowControlsOverlay 的平台轴)。
-    mediaSession: { cls: 'MediaSession', methods: {
-      setActionHandler: [2, () => undefined], setPositionState: [1, () => undefined],
-    }, props: { metadata: null, playbackState: 'none' }, gate: chromeHost },
+    // mediaSession 不在此表:host 形态分裂(chrome 原型 accessor / WebView 实例 own data),见 apply 特例。
 
     // ── formFactor 轴:平台差(异于上面的 host 差)──────────────────────────────────────────
     // Contacts Picker:Android 专属(移动端 chrome+webview 皆有、桌面无)。
@@ -191,6 +188,15 @@ export default {
     const webkitPersistentStorage = quota.create();
     accessors.webkitTemporaryStorage = () => webkitTemporaryStorage;
     accessors.webkitPersistentStorage = () => webkitPersistentStorage;
+
+    // 特例:mediaSession 形态 host 分裂[实测]——桌面/移动 Chrome 在 Navigator.prototype(accessor);
+    // WebView 真机改挂 navigator 实例 own data property(无 prototype getter,对照基线 navigator ownKeys=['mediaSession'])。
+    const mediaSession = mask.singleton('MediaSession', {
+      methods: { setActionHandler: [2, () => undefined], setPositionState: [1, () => undefined] },
+      props: { metadata: null, playbackState: 'none' },
+    });
+    if (chromeHost(traits)) accessors.mediaSession = () => mediaSession;
+    else Object.defineProperty(nav, 'mediaSession', { value: mediaSession, writable: true, enumerable: true, configurable: true });
 
     mask.mixin(nav, accessors);
   },
