@@ -15,16 +15,14 @@ export default {
     const p = profile.section('screen');
     const o = p.orientation || {};
 
-    // ScreenOrientation 单例(对照 navigator.connection 的 NetworkInformation 建法):继承 EventTarget,
-    // type/angle 为原型只读 accessor(读 profile),onchange 可写 accessor(get-only 会令 strict 赋值抛),
-    // lock/unlock 为方法壳。eager create → getter 恒返同一实例(=== 不变量)。
+    // ScreenOrientation 单例:继承 EventTarget,type/angle 只读,onchange 可写,lock/unlock 方法壳。
     const so = mask.iface('ScreenOrientation');
     mask.eventTargetProto(so.proto); // 真机:ScreenOrientation extends EventTarget(顺带登记 brandless)
     mask.accessors(so.proto, {
       type: () => o.type || 'landscape-primary',
       angle: () => o.angle ?? 0,
     });
-    mask.eventHandler(so.proto, 'onchange'); // 可写 on* 访问器(理由见 mask.eventHandler)
+    mask.eventHandler(so.proto, 'onchange');
     mask.methods(so.proto, { lock: [1, () => mask.adopt(window.Promise.resolve())], unlock: [0, () => undefined] });
     const orientation = so.create();
 

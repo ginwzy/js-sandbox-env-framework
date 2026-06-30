@@ -32,14 +32,8 @@ export default {
       return t && typeof t[key] === 'number' ? t[key] : undefined;
     };
 
-    // .prototype 残留清除目标:真机 native 方法无 own .prototype,但 jsdom 把这些实现为普通 function declaration
-    // → 残留 .prototype(non-configurable 删不掉)。ground truth = L2 真机结构基线的 fn.hasPrototype===false 名集
-    // (详见 docs/spec/prototype-residue-elimination.md)。刻意用基线而非运行时启发式 —— 启发式分不清"jsdom 没填
-    // prototype"与"本就是 helper",会误伤 Window/StyleSheet/CSSRule 等真机有 .prototype 的接口构造器。deproto 仅当
-    // "名在表且确有残留"才替换:漏列只剩 tell(被 diff/gate 抓),不会破坏 new(对比"排除名单"漏列即破)。
-    // receiver:window helper 绑 window;Document.prototype 方法随实例变 → this-转发 forwarder(bindTo 省略)。
-    // 刻意排除 print:两基线唯一分歧项 —— desktop Chrome native(hasPrototype=false),Android WebView 却是 JS shim
-    //   (hasPrototype=true、name="")。留它带 jsdom 原状,避免按桌面口径剥 proto 反偏离 webview;其 shim 仿真单独处理。
+    // .prototype 残留清除:名集据 L2 基线 fn.hasPrototype===false(详见 docs/spec/prototype-residue-elimination.md)。
+    // 用基线(非启发式)→ 漏列只剩 tell,不破 new。print 刻意排除(desktop/webview 基线分歧)。
     const NO_PROTOTYPE = {
       window: new Set([
         'alert', 'atob', 'blur', 'btoa', 'cancelAnimationFrame', 'cancelIdleCallback', 'captureEvents',

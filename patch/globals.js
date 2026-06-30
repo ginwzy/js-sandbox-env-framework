@@ -65,15 +65,13 @@ export default {
       window[name] = native(impl, name, len);
     }
 
-    // 可 new 的接口类壳:mask.ctorIface 的薄封装,默认 parent=EventTarget.prototype(globals 这些接口真机
-    // 多继承 EventTarget)。注:这些不在 harness probe 目标内(盲区),形态靠运行时自测,无真机基线对照。
+    // 可 new 的接口类壳(默认 parent=EventTarget.prototype)。
     const makeCtor = (name, len, opts = {}) => mask.ctorIface(name, len, opts.init, { parent: ET, ...opts });
 
-    // illegal-constructor 单例:类不可 new,但有一个全局实例(indexedDB / visualViewport)。取别名与 makeCtor 平行。
+    // illegal-constructor 单例(indexedDB / visualViewport)。
     const makeSingleton = mask.singleton;
 
-    // Worker:postMessage/terminate;不真正加载脚本(壳),保留可 addEventListener。
-    // length=1:真机 Worker(scriptURL, options?) 仅首参必选(jsdom 误为 2)。
+    // Worker:postMessage/terminate 壳;length=1(真机仅首参必选)。
     if (typeof W.Worker !== 'function') {
       makeCtor('Worker', 1, {
         init: (self) => { self.onmessage = null; self.onerror = null; self.onmessageerror = null; },
@@ -81,7 +79,7 @@ export default {
       });
     }
 
-    // RTCPeerConnection:WebRTC 反检测重点(IP/媒体设备指纹)。给关键方法壳。
+    // RTCPeerConnection:WebRTC 反检测重点。
     if (typeof W.RTCPeerConnection !== 'function') {
       makeCtor('RTCPeerConnection', 0, {
         methods: {
@@ -97,7 +95,7 @@ export default {
       });
     }
 
-    // Notification:静态 permission/requestPermission(权限指纹)。
+    // Notification:静态 permission/requestPermission。
     if (typeof W.Notification !== 'function') {
       makeCtor('Notification', 1, {
         init: (self) => { self.onclick = null; self.onclose = null; self.onerror = null; self.onshow = null; },
@@ -136,7 +134,7 @@ export default {
           width: () => win.innerWidth ?? 0, height: () => win.innerHeight ?? 0, scale: () => 1,
         },
       });
-      // onresize/onscroll 走原型可写 accessor(非实例 own data):真机在 VisualViewport.prototype、实例空。
+      // onresize/onscroll 走原型可写 accessor(真机在 prototype、实例空)。
       const vvProto = Object.getPrototypeOf(vv);
       mask.eventHandler(vvProto, 'onresize');
       mask.eventHandler(vvProto, 'onscroll');
@@ -145,10 +143,10 @@ export default {
       });
     }
 
-    // matchMedia + MediaQueryList:真机 MediaQueryList.prototype → EventTarget.prototype(可 addEventListener)。
+    // matchMedia + MediaQueryList(真机 MQL → EventTarget)。
     if (typeof window.matchMedia !== 'function') {
       const mql = mask.iface('MediaQueryList');
-      // iface 默认把 proto 顶到 window.Object.prototype;插入 EventTarget 层对齐真机原型链(顺带登记 brandless)。
+      // 插入 EventTarget 层对齐真机原型链。
       try { mask.eventTargetProto(mql.proto); } catch { /* noop */ }
 
       const coarse = traits.formFactor === 'mobile';

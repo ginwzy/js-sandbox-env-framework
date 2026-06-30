@@ -1,25 +1,12 @@
 /**
- * patch/webgl —— WebGL 指纹查表回放(GPU 厂商/型号 + getParameter 参数 + 扩展列表)。
+ * patch/webgl —— WebGL 指纹查表回放(getParameter 全表 + extensions + UNMASKED_*)。
  *
- * 根因:jsdom 无 WebGL,getContext('webgl'/'webgl2') 返回 null —— 真机最强硬件指纹之一整段缺失(检测器读
- * UNMASKED_RENDERER_WEBGL / VENDOR / MAX_* 做设备哈希)。本 patch 不做真实渲染,只把 profile.webgl(capture
- * 采的 getParameter 全表 + extensions + UNMASKED_*)按 enum 查表回放 —— 纯数据,无 canvas/audio 的渲染回放难题。
+ * 根因:jsdom 无 WebGL → 最强硬件指纹整段缺失。纯数据回放(profile.webgl),不做真实渲染。
+ * WebGL1/2 两个独立 iface;常量在 prototype(enumerable+frozen);数组参数返回 window-realm typed array;
+ * debug_renderer_info 扩展对象不用 mask.iface(避免造全局 EXTRA)。profile.webgl 缺则整段不装。
  *
- * 形态对照真机[实测,Chrome 148/M4]:
- *  - WebGLRenderingContext 与 WebGL2RenderingContext 是**两个独立接口**(WebGL2 不继承 WebGL1)→ 建两个独立
- *    iface(真机 window 有这两个全局构造器)。常量在 prototype 上,enumerable + 非 writable + 非 configurable。
- *  - getParameter 数组类参数返回 **window-realm typed array**(MAX_VIEWPORT_DIMS→Int32Array、ALIASED_*→Float32Array;
- *    检测器 `result instanceof gl.Int32Array`)—— 用 window.Int32Array 构造,mask.adopt 管不了 typed array。
- *  - WEBGL_debug_renderer_info 扩展对象:constructor.name==='Object'、own keys 空、toStringTag='WebGLDebugRendererInfo'、
- *    两 UNMASKED_* 常量在其**原型**上 → Object.create(extProto),**不能**用 mask.iface(否则凭空造 window 全局 EXTRA 泄漏)。
- *
- * 门控:profile.webgl 缺(未采 GPU)则整段不装,不伪造无中生有的 GPU(getContext 维持 null,同 jsdom 原样)。
- *
- * 已知未尽项(陈述现状):
- *  - 常量为精简集(对齐 collect.js 采集的 KEYS),非真机全量 → proto own 键数与真机有差。
- *  - getContext('webgl') 复用 webgl2 同一张表(profile 仅采 webgl2),故 webgl1 的 VERSION 串会是 "WebGL 2.0…"。
- *  - getExtension 仅实现 WEBGL_debug_renderer_info;其余带方法的扩展返回 null —— 空方法壳调用即穿帮,宁可不给
- *    (代价:与 getSupportedExtensions 列表不一致,留作后续按需补真实扩展对象)。
+ * 已知未尽项:常量为精简集(键数有差);webgl1 复用 webgl2 表(VERSION 串不对);
+ * getExtension 仅实现 debug_renderer_info(其余返 null)。
  */
 
 // 常量名→标准 enum 值(WebGL 规范定义,跨设备/版本恒定,host 无关;[实测]对齐 capture/collect.js 采集的 KEYS)。
@@ -45,7 +32,7 @@ const CONTEXT_ATTRS = {
 
 export default {
   name: 'webgl',
-  after: [], // 同 canvas:hook 的 HTMLCanvasElement.prototype 来自 jsdom 底座,无真实依赖。原 ['document'] 悬空,已删。
+  after: [],
   apply({ window, profile, mask }) {
     const wg = profile.section('webgl');
     if (!wg || !wg.parameters) return; // 未采 GPU → 不伪造,getContext 维持 null(同 jsdom 原样)
@@ -91,8 +78,7 @@ export default {
     setupProto(webgl1.proto);
     setupProto(webgl2.proto);
 
-    // getContext 接管:同一 canvas 同 type 返回同一 context(真机[实测]单例语义);webgl/webgl2 外 delegate
-    // (2d 等不动)。为何须 delegate 未知 type:多 patch 共 hook 同一 getContext、拓扑序未定 —— 协作契约见 canvas。
+    // getContext 接管:同一 canvas 同 type 返回单例(真机[实测]);非 webgl delegate(协作契约见 canvas)。
     const cache1 = new WeakMap(); const cache2 = new WeakMap();
     const ctxFor = (canvas, reg, cache) => {
       let c = cache.get(canvas);

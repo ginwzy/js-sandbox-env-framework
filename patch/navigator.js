@@ -11,11 +11,7 @@
  */
 import { chromeHost, mobileOnly, desktopOnly } from './gates.js';
 
-// data 方法形状表:[名, arity, 实现, gate?](row 形状同 patch/globals.methodTable)。真机为 Navigator.prototype
-// 上 enumerable 的 data 方法;arity = 真机基线 length(fn 校正,根因见 mask.fn)。可信壳语义:void→resolve、
-// 返回复杂对象→永久 pending、旧式 (constraints,success,error) 回调签名→无返回。
-// 分批:secure-context 批(getBattery 起,jsdom 全缺,同 userAgentData 经 secure 重采才暴露);chromeHost 批
-// (WebView 缺的 Chrome 专属:Protected Audience 广告竞价、Protocol Handler、AppBadge)。
+// data 方法形状表:[名, arity, 实现, gate?]。壳语义:void→resolve、复杂对象→pending、回调签名→无返回。
 function methodTable(mask) {
   const { promise, pending, adopt } = mask;
   return [
@@ -46,11 +42,8 @@ function methodTable(mask) {
   ];
 }
 
-// 接口单例形状表:navigator.<key> = accessor getter,返回 window 全局接口类的单例。表项 { cls, methods?, props?,
-// gate? } 即 mask.singleton 的 (name, opts),driver 透传。真机这些 getter 多次访问 === 同一对象 → driver eager
-// 建实例 + 注册全局类,getter 仅返回单例(不在 getter 内重建,否则破 === 且重复注册)。补壳深度按检测频率:
-// 高频(media/clipboard/storage/credentials/serviceWorker/gpu)补关键方法,低频留裸实例(正确 tag/typeof/instanceof
-// 即够指纹面)。刻意不插 EventTarget 层:插了会令 addEventListener 触发 jsdom brand-check(同 screen/connection)。
+// 接口单例形状表:{ cls, methods?, props?, gate? } → mask.singleton,driver 透传。
+// eager 建实例保 === 不变量;刻意不插 EventTarget 层(避免 jsdom brand-check)。
 function ifaceTable(mask) {
   const { promise, pending, adopt } = mask;
   return {
@@ -146,7 +139,7 @@ export default {
     const mobile = traits.formFactor === 'mobile';
     const passes = (gate) => !gate || gate(traits);
 
-    // ── 形状层:标量指纹(绑 profile 值)。以原型 getter 覆盖(mask.mixin 处理描述符 + native 化)。
+    // ── 形状层:标量指纹(绑 profile 值)。
     mask.mixin(nav, {
       userAgent: () => p.userAgent ?? nav.userAgent,
       appVersion: () => p.appVersion ?? nav.appVersion,
@@ -163,38 +156,35 @@ export default {
       doNotTrack: () => null,
     });
 
-    // ── 机制层 driver:data 方法(jsdom 已有则不覆盖 —— 真机 enumerable data 方法形态)。
+    // ── 机制层 driver:data 方法(jsdom 已有则不覆盖)。
     for (const [name, len, impl, gate] of methodTable(mask)) {
       if (!passes(gate) || name in proto) continue;
       mask.method(proto, name, len, impl);
     }
 
-    // ── 机制层 driver:接口单例 accessor(eager 建单例 + getter 恒返同一对象的 === 不变量,见上方 ifaceTable 表注)。
+    // ── 机制层 driver:接口单例 accessor(=== 不变量,见 ifaceTable 表注)。
     const accessors = {};
     for (const [key, { cls, methods = {}, props = {}, gate }] of Object.entries(ifaceTable(mask))) {
       if (!passes(gate)) continue;
       const inst = mask.singleton(cls, { methods, props });
       accessors[key] = () => inst;
     }
-    // chrome-only 非接口标量(部署强制开关,非单例)—— 不入 ifaceTable(那是接口单例专表)。
+    // chrome-only 非接口标量(不入 ifaceTable)。
     if (chromeHost(traits)) accessors.deprecatedRunAdAuctionEnforcesKAnonymity = () => true;
 
-    // ── 特例(刻意不入表):connection 数据来自 profile(非 host/formFactor 门控)→ 裸 iface 直建;p.connection
-    //    缺省时整属性不存在(真机无网络信息时亦然)。真机 downlink/effectiveType/rtt/saveData 是
-    //    NetworkInformation.prototype 只读 IDL attribute、onchange 可写,实例自身无 own 数据键(L2 基线为空)——
-    //    故全装原型 accessor;若 Object.assign 挂实例会造 5 条 EXTRA tell。
+    // ── 特例:connection 数据来自 profile → 裸 iface;缺省则整属性不存在。
+    //    全装原型 accessor(非实例 own,L2 基线实例为空)。
     if (p.connection) {
       const ni = mask.iface('NetworkInformation');
       const c = p.connection;
       const readonly = {};
       for (const k of Object.keys(c)) readonly[k] = () => c[k];
       mask.accessors(ni.proto, readonly);
-      mask.eventHandler(ni.proto, 'onchange'); // 可写 on* 访问器(理由见 mask.eventHandler);实例始终无 own 键
-      const conn = ni.create(); // eager 建单例,getter 返回同一对象(=== 不变量,同其它 iface 单例)
+      mask.eventHandler(ni.proto, 'onchange');
+      const conn = ni.create();
       accessors.connection = () => conn;
     }
-    // ── 特例(刻意不入表):webkit{Temporary,Persistent}Storage 是同一 DeprecatedStorageQuota 类的**两个**
-    //    实例(singleton 一类一例模型表达不了),故走底层 iface;两实例 eager 建、getter 各返回其一(=== 不变量)。
+    // ── 特例:webkit{Temporary,Persistent}Storage 同类两实例(singleton 表达不了),走底层 iface。
     const quota = mask.iface('DeprecatedStorageQuota');
     mask.methods(quota.proto, { queryUsageAndQuota: [2, () => undefined], requestQuota: [2, () => undefined] });
     const webkitTemporaryStorage = quota.create();

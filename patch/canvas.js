@@ -1,28 +1,15 @@
 /**
- * patch/canvas —— Canvas 2D 指纹壳(构造器壳 + 原型方法 native 化 + getContext('2d') 受控壳)。
+ * patch/canvas —— Canvas 2D 指纹壳。
  *
- * 根因:jsdom 不带 canvas 包 —— getContext('2d') 返回 null、CanvasRenderingContext2D/ImageData/TextMetrics/
- * CanvasGradient 全 undefined、toDataURL() 返回 null。真机 getContext('2d') **永不**返 null,缺壳即 tell(指纹
- * 脚本当场崩溃更是强 tell)。故 canvas 壳**必须** —— webgl 那条"空壳比缺失更易识破、宁可不给"的判断在此**反转**
- * (同一原则"匹配真机",相反结论:webgl getExtension 的 null 是合法真机响应,canvas 的 null 真机绝不发生)。
+ * 根因:jsdom 无 canvas 包 → getContext('2d') 返回 null(真机绝不发生,缺壳即 tell/崩)。
+ * 范围:指纹脚本触及的不崩调用链:getContext('2d') → 绘制(no-op) → measureText/toDataURL/getImageData。
+ * 四个接口经 mask.iface 注册(instanceof 成立);getContext 单例语义(真机[实测])。
  *
- * 范围(短期,对齐并超 sdenv 下限):锚定指纹脚本真实触及的不崩调用链:getContext('2d') → fillStyle/font 赋值
- * + fillRect/fillText/arc(no-op) → measureText()→TextMetrics → toDataURL()→string / getImageData()→ImageData;
- * 不投机建链外接口。形态:四个接口均真机 window 全局构造器(new 抛 Illegal)→ mask.iface 注册 + instanceof 成立,
- * 实例由工厂方法产出;getContext 同一 canvas 返回同一 2d context(真机[实测]单例),canvas accessor per-instance。
- *
- * 已知未尽项(陈述现状;留 payload-keyed replay 长期解,harness 不探 canvas → 自测只验**结构**不验指纹值):
- *  - toDataURL/getImageData/measureText 返**结构有效占位**(正确 type/shape),非真机渲染像素/字体度量 → 值不保真
- *    且占位固定 → 跨实例字节相同(关联 tell)。
- *  - 2d context 属性(fillStyle/font/...)、ImageData 的 data/width/height 真机为 prototype accessor,此处落实例 own
- *    data → 读回非真机规范化值/结构有差(不崩)。
- *  - new ImageData(w,h) 真机合法,此处 mask.iface 抛 Illegal(指纹少用,getImageData 是主路径)。
- *  - toBlob(jsdom 自带、不抛但内容非真机渲染)/ OffscreenCanvas(未建,涉 worker)均 scoped-out,留长期。
+ * 已知未尽项:toDataURL/getImageData/measureText 返结构有效占位(非真机渲染值,跨实例相同);
+ * context 属性/ImageData 字段落实例 own(真机为 prototype accessor);toBlob/OffscreenCanvas 留长期。
  */
 
-// 1x1 空白占位 data URL,**按请求 type 自洽**(真机[实测]1x1 toDataURL 各格式输出)。非真机渲染像素、固定值
-// → 跨 mimic 实例字节相同(关联 tell),留 payload-keyed replay 长期解。真机据 type 返回对应 MIME 前缀
-// (image/png|jpeg|webp),不支持的 type(gif/bmp/未知)回退 png —— 故 placeholderFor 未命中即取 png。
+// 1x1 空白占位 data URL,按请求 type 自洽(真机[实测]);未命中 type 回退 png。
 const PLACEHOLDER = {
   'image/png':
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4AWJiYGBgAAAAAP//XRcpzQAAAAZJREFUAwAADwADJDd96QAAAABJRU5ErkJggg==',
@@ -33,9 +20,7 @@ const PLACEHOLDER = {
 };
 const placeholderFor = (type) => PLACEHOLDER[String(type || '').toLowerCase()] || PLACEHOLDER['image/png'];
 
-// CanvasRenderingContext2D.prototype 高频几何/绘制方法 → arity(no-op 不抛,仅满足"用 canvas 不崩")。
-// arity 为真机 Chrome [实测]值,非凭规范手数:WebIDL .length = 重载里**最少必填参数**,故重载方法反直觉
-// —— setTransform()/0(空重载)、roundRect 必填 4(radii 可选)、fillText 必填 3(maxWidth 可选)。
+// CRC2D.prototype 高频方法 → arity(no-op)。arity 为真机[实测]值(WebIDL .length=最少必填,重载方法反直觉)。
 const NOOP_METHODS = {
   save: 0, restore: 0, scale: 2, rotate: 1, translate: 2, transform: 6, setTransform: 0, resetTransform: 0,
   clearRect: 4, fillRect: 4, strokeRect: 4,
@@ -48,18 +33,15 @@ const NOOP_METHODS = {
 
 export default {
   name: 'canvas',
-  after: [], // 无真实依赖:hook 的 HTMLCanvasElement.prototype 来自 jsdom 底座(无条件存在),mask.hook 幂等守卫
-             // 使与 window patch 的相对顺序无关。原 ['document'] 为悬空依赖(无此 patch),pipeline 静默吞,已删。
+  after: [],
   apply({ window, mask }) {
-    // 接口壳(真机全局构造器,iface 注册 window.<Name>,new 抛 Illegal,instanceof 成立)。
+    // 接口壳(真机全局构造器 → mask.iface)。
     const crc2d = mask.iface('CanvasRenderingContext2D');
     const textMetrics = mask.iface('TextMetrics');
     const imageData = mask.iface('ImageData');
     const gradient = mask.iface('CanvasGradient');
 
-    // Path2D:真机**可构造**(new Path2D() / new Path2D(pathOrSvg)),非 Illegal —— 缺失则 `new Path2D()` 抛
-    // ReferenceError、`ctx.fill(path)` 崩(违反"不崩")。建可构造壳 + 几何方法 no-op(ctx.fill/stroke/
-    // isPointInPath 忽略 path 参数,本就 no-op)。
+    // Path2D:真机可构造(缺失则 new Path2D() 即崩)。
     mask.ctorIface('Path2D', 0, null, {
       methods: {
         addPath: [1, function addPath() {}], moveTo: [2, function moveTo() {}], lineTo: [2, function lineTo() {}],
@@ -71,10 +53,10 @@ export default {
 
     const WUint8Clamped = window.Uint8ClampedArray;
 
-    // CanvasGradient:createLinearGradient 等返回;addColorStop no-op(颜色指纹常经 gradient,故 include)。
+    // CanvasGradient:createLinearGradient 等返回;addColorStop no-op。
     mask.methods(gradient.proto, { addColorStop: [2, function addColorStop() {}] });
 
-    // TextMetrics 实例:measureText 返回,.width 等度量为占位(确定性、非真机字体度量;实例 own 可读)。
+    // TextMetrics 实例:measureText 返回,度量为占位值。
     const makeMetrics = (text) => {
       const m = textMetrics.create();
       const w = String(text == null ? '' : text).length * 7; // 占位度量:确定但非真机
@@ -91,7 +73,7 @@ export default {
       return m;
     };
 
-    // ImageData 实例:getImageData/createImageData 返回;.data 为 window-realm Uint8ClampedArray(全 0 占位)。
+    // ImageData 实例:getImageData/createImageData 返回;.data 为 window-realm Uint8ClampedArray(全 0)。
     const makeImageData = (w, h) => {
       const d = imageData.create();
       const px = Math.max(0, (w | 0) * (h | 0));
@@ -102,9 +84,7 @@ export default {
       return d;
     };
 
-    // getTransform 返回 DOMMatrix(真机)。realm 暂无 DOMMatrix 全局(属另一类缺口:整个接口缺失,单独补,届时
-    // 此处回放真实变换矩阵且 instanceof DOMMatrix 成立)。此处先返 identity 矩阵的结构占位:tag 为 DOMMatrix、
-    // 字段 a..f/m11..m44/is2D/isIdentity 可读 —— 消除 ctx.getTransform() 调用即崩(=最响 tell);值/原型链不保真。
+    // getTransform:identity DOMMatrix 结构占位(realm 暂无 DOMMatrix 全局,值/原型链不保真,但不崩)。
     const makeIdentityMatrix = () => mask.adopt(mask.tag({
       a: 1, b: 0, c: 0, d: 1, e: 0, f: 0,
       m11: 1, m12: 0, m13: 0, m14: 0, m21: 0, m22: 1, m23: 0, m24: 0,
@@ -112,7 +92,7 @@ export default {
       is2D: true, isIdentity: true,
     }, 'DOMMatrix'));
 
-    // CRC2D.prototype 方法集:no-op 几何/绘制 + 有返回值的工厂方法(经 mask.methods native 化)。
+    // CRC2D.prototype 方法集:no-op 几何/绘制 + 工厂方法。
     const methods = {};
     for (const [n, len] of Object.entries(NOOP_METHODS)) methods[n] = [len, function () {}];
     Object.assign(methods, {
@@ -125,9 +105,7 @@ export default {
       isPointInPath: [2, function isPointInPath() { return false; }],
       isPointInStroke: [2, function isPointInStroke() { return false; }],
       getLineDash: [0, function getLineDash() { return mask.adopt([]); }],
-      // 标准 CRC2D 方法,缺失则调用即抛 TypeError(=崩,最响 tell);补非抛壳。getContextAttributes 返回真机[实测]
-      // 默认属性(经典 4 键;Chrome 149 新增 colorType/toneMapping 未给 v148,避免反成"超前键"tell —— 待真机
-      // 148 采集面校准)。getTransform→identity DOMMatrix 占位(见上)。reset no-op;isContextLost 恒 false。
+      // getContextAttributes 返回真机[实测]默认属性;getTransform→identity 占位;reset no-op;isContextLost 恒 false。
       getContextAttributes: [0, function getContextAttributes() {
         return mask.adopt({ alpha: true, colorSpace: 'srgb', desynchronized: false, willReadFrequently: false });
       }],
@@ -137,12 +115,10 @@ export default {
     });
     mask.methods(crc2d.proto, methods);
 
-    // per-instance canvas accessor:读 this 取关联 <canvas>(mask.instAccessor 的实例态 getter)。
-    const ctxCanvas = new WeakMap(); // 2d context 实例 → 关联 <canvas>
+    const ctxCanvas = new WeakMap(); // 2d context → 关联 <canvas>
     mask.instAccessor(crc2d.proto, 'canvas', function () { return ctxCanvas.get(this) || null; });
 
-    // getContext 接管:同一 canvas 的 '2d' 返回同一 context(真机单例);非 '2d' delegate 往下(2d/webgl/webgl2
-    // 各 patch hook 同一 getContext、拓扑序未定,故两边都须 delegate 未知 type → 组合后三者皆可 resolve)。
+    // getContext 接管:'2d' 返回单例 context;非 '2d' delegate(多 patch 共 hook getContext,须互相 delegate)。
     const cache = new WeakMap();
     const ctxFor = (canvas) => {
       let c = cache.get(canvas);
@@ -154,10 +130,7 @@ export default {
       return orig.call(this, type, attrs);
     });
 
-    // toDataURL:jsdom 无渲染返回 null(真机绝不为 null)→ 覆盖为按请求 type 自洽的占位串。真机据 type 返回对应
-    // MIME 前缀(webp/jpeg/png);忽略 type 恒返 image/png 会让 `toDataURL('image/webp').startsWith('data:image/webp')`
-    // 这类**特性探测**在自称支持 webp 的 Chrome 上为 false —— 自洽契约违反、纯字符串即穿,故复刻 type→前缀映射。
-    // 占位**字节**仍为 1x1 空白(非真机渲染像素),值保真留 payload-keyed replay 长期解。
+    // toDataURL:jsdom 返回 null(真机绝不为 null)→ 按请求 type 返自洽占位串(复刻 type→MIME 映射)。
     mask.hook(window.HTMLCanvasElement.prototype, 'toDataURL', () => function toDataURL(type) { return placeholderFor(type); });
   },
 };

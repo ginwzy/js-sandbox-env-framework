@@ -1,24 +1,12 @@
 /**
  * patch/audio —— Web Audio 指纹壳(可构造 context + 节点链 + getChannelData 占位)。
  *
- * 根因:jsdom 无 Web Audio —— OfflineAudioContext/AudioContext/AudioBuffer/各 AudioNode 全 undefined → audio
- * 指纹脚本(`new OfflineAudioContext(...)` 起手)当场崩溃。真机这些全是 window 全局,缺失即 tell。范围(短期,
- * 超 sdenv)锚定指纹脚本真实触及的不崩调用链:OfflineAudioContext → createOscillator/Compressor/Gain →
- * node.connect 链 → start() → startRendering()→Promise<AudioBuffer> → getChannelData→Float32Array;不投机建链外节点。
+ * 根因:jsdom 无 Web Audio → 指纹脚本(`new OfflineAudioContext(...)` 起手)当场崩溃。
+ * 范围:指纹触及的不崩调用链:OfflineAudioContext → createOscillator/Compressor/Gain →
+ * connect → start → startRendering → getChannelData→Float32Array。
  *
- * 形态对照真机:
- *  - context/AudioBuffer 真机**可 new** → 自建可构造壳 ctorIface(区别 mask.iface 的"new 即抛");
- *    webkit{,Offline}AudioContext 别名指向同 ctor。
- *  - 各 AudioNode 经工厂方法产出 → mask.iface(new 抛 Illegal)+ 子类 proto 继承 AudioNode 基类
- *    (connect/disconnect 住基类原型,真机如此)。connect 返回被连 node(真机链式)。
- *  - AudioParam 经 mask.iface;.value 可写、ramp/setValueAtTime 链式返 this。
- *
- * 已知未尽项(陈述现状;留 payload-keyed replay 长期解,harness 不探 audio → 自测只验**结构**不验指纹值):
- *  - getChannelData 返**全 0 占位** Float32Array(正确 type/length),非真机渲染样本 → 值不保真且跨实例相同(关联 tell)。
- *  - 跳过 BaseAudioContext/AudioScheduledSourceNode/EventTarget 中间继承层(各 Node 直继承 AudioNode 基类;
- *    EventTarget 方法装 context proto 自身规避 jsdom brand-check)→ 原型链深度与真机有差。
- *  - complete 事件对象为普通 tagged 对象(非真机 OfflineAudioCompletionEvent);AudioParam/node 的 value/type 为
- *    实例 own data(真机为 prototype accessor)。
+ * 已知未尽项:getChannelData 返全 0 占位(跨实例相同);跳过 BaseAudioContext/EventTarget 中间继承层
+ * (原型链深度有差);AudioParam/node 标量为实例 own(真机 prototype accessor)。
  */
 
 export default {
@@ -27,8 +15,7 @@ export default {
   apply({ window, mask }) {
     const WFloat32 = window.Float32Array;
 
-    // 简易 EventTarget:装 context proto 自身并自维护 listener map —— 不继承 jsdom EventTarget.prototype,
-    // 后者 webidl brand-check 对非 jsdom 实例抛 Illegal invocation(原型链深度有差,见头注"已知未尽项")。
+    // 简易 EventTarget:装 context proto 自身(不继承 jsdom ETP,其 brand-check 对非 jsdom 实例抛)。
     const listeners = new WeakMap();
     const fireEvent = (target, type, ev) => {
       const m = listeners.get(target);
@@ -59,17 +46,14 @@ export default {
       cancelScheduledValues: [1, function cancelScheduledValues() { return this; }],
       cancelAndHoldAtTime: [1, function cancelAndHoldAtTime() { return this; }],
     });
-    // automationRate 真机[实测]'a-rate'(prototype accessor);缺则读 undefined 是 tell。多数 param 默认 a-rate,
-    // 此处统一返 'a-rate'(per-param k-rate 默认的细分留长期)。
+    // automationRate 真机[实测]'a-rate';此处统一(per-param k-rate 细分留长期)。
     mask.instAccessor(audioParam.proto, 'automationRate', function () { return 'a-rate'; });
-    // value 为实例可写 own(真机 prototype accessor,见"已知未尽项");default/min/max 占位。
+    // value 为实例可写 own(真机 prototype accessor,见头注)。
     const makeParam = (defaultValue, minValue, maxValue) =>
       audioParam.create({ value: defaultValue, defaultValue, minValue, maxValue });
 
-    // ── AudioNode 基类 + 子类(子类 proto 继承基类 → connect/disconnect 住基类原型,真机如此) ──
-    // 标量拓扑(numberOfInputs/Outputs/channelCount/Mode/Interpretation)真机[实测]为 AudioNode.prototype 访问器,
-    // 值随节点类型而异(ni/no/ccm 各不同) → topoByProto 按每类型 proto 存常量,基类 getter 读 this 的 proto 取值;
-    // context 随实例(=创建它的 context) → nodeCtx。缺这些标量 → 读出 undefined(typeof node.channelCountMode==='undefined' 即穿)。
+    // ── AudioNode 基类 + 子类(子类 proto 继承基类,connect/disconnect 住基类原型) ──
+    // 拓扑标量(ni/no/cc/ccm/ci)真机[实测]为 AudioNode.prototype 访问器,值随节点类型异 → topoByProto 按类型存。
     const topoByProto = new Map(); // node proto → { ni, no, cc, ccm, ci }(真机实测,见各 nodeIface 调用)
     const nodeCtx = new WeakMap(); // node 实例 → 创建它的 context
     const mkNode = (n, ctx, props) => { const node = n.create(props); nodeCtx.set(node, ctx); return node; };
@@ -178,9 +162,7 @@ export default {
         const s = offState.get(this) || {};
         const buffer = makeBuffer(s.numCh, s.length, s.sampleRate);
         const self = this;
-        // 真机渲染异步完成 → state 转 'closed' → 触发 complete 事件 + oncomplete → resolve Promise<AudioBuffer>。
-        // (FingerprintJS2 等主流 audio 指纹走 oncomplete/addEventListener('complete') 路径,非 await。)对照 Blink
-        // FireCompletionEvent:派发前置 closed,故 oncomplete 内读到的 state 已是 'closed'。
+        // 对照 Blink FireCompletionEvent:派发前置 state='closed',oncomplete 内读到的 state 已是 'closed'。
         const ev = mask.adopt(mask.tag({ type: 'complete', renderedBuffer: buffer }, 'OfflineAudioCompletionEvent'));
         return window.Promise.resolve().then(() => {
           s.rendered = true;                  // state getter 据此返 'closed'(真机渲染后单向转换,offline 只能渲一次)
@@ -193,7 +175,7 @@ export default {
     });
     mask.instAccessors(offline.proto, {
       length: function () { return (offState.get(this) || {}).length || 0; },
-      // 真机[对照 Blink]:渲染前 'suspended',startRendering 完成后单向转 'closed'(不可逆,offline 只渲一次)。
+      // [对照 Blink]:渲染前 'suspended',完成后单向转 'closed'。
       state: function () { return (offState.get(this) || {}).rendered ? 'closed' : 'suspended'; },
     });
 
@@ -213,7 +195,7 @@ export default {
       baseLatency: function () { return 0; },
     });
 
-    // webkit 前缀别名(Chrome 保留;指纹常 `window.AudioContext || window.webkitAudioContext`)。
+    // webkit 前缀别名(Chrome 保留)。
     Object.defineProperty(window, 'webkitAudioContext', { value: audioCtx.ctor, writable: true, configurable: true, enumerable: false });
     Object.defineProperty(window, 'webkitOfflineAudioContext', { value: offline.ctor, writable: true, configurable: true, enumerable: false });
   },

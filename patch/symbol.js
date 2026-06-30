@@ -1,22 +1,9 @@
 /**
  * patch/symbol —— 隐藏 webidl2js / jsdom 内部 Symbol 泄漏。
  *
- * 现状[实测]:jsdom 用 webidl2js 生成 Web IDL 包装,内部用模块级 Symbol 挂实现/注册表,直接暴露在反射面:
- *   Object.getOwnPropertySymbols(window)    -> Symbol([webidl2js] constructor registry) | Symbol(named property tracker) | Symbol(impl)
- *   Object.getOwnPropertySymbols(document)  -> Symbol(impl)
- *   Object.getOwnPropertySymbols(navigator) -> Symbol(impl)
- *   广采集另见 Symbol(SameObject caches) 及第二个 Symbol(impl)。
- * "[webidl2js]" 直接点名 jsdom 代码生成器,真实浏览器的 window/document/navigator 等 getOwnPropertySymbols 均为 []。
- * vmp 遍历反射面一测即破。
- *
- * 采集策略(关键):本 patch 在 pipeline 装配期运行,**先于任何页面脚本**,故此刻 jsdom 对象上的任何 own symbol
- * 必然是内部 symbol。因此从一批代表性包装对象上**全量按身份采集 own symbol**,即得完整内部集合 —— 无需按描述串
- * (如 '[webidl2js]')匹配,从根上杜绝误伤页面合法 Symbol;且自动覆盖未采样的包装类型,并区分同描述不同身份的多个 impl。
- *
- * 过滤策略:对三条会暴露 symbol 键的反射 API 按身份过滤(对照 sdenv Object.js 的 getOwnPropertySymbols 壳,但 sdenv
- * 仅处理 window 且粗暴返回 []):getOwnPropertySymbols(滤除,覆盖所有包装对象)、Reflect.ownKeys(仅滤 symbol 部分)、
- * getOwnPropertyDescriptors(从结果删内部 symbol 键)。internal symbol 不能删(jsdom 挂实现所需),只能在反射层隐藏;
- * 即便经 spread 物理拷到副本,副本的 getOwnPropertySymbols 同样被本壳过滤 → 反射面始终拿不到引用,三条 API 足以闭合泄漏面。
+ * 现状[实测]:jsdom 内部 Symbol(impl/registry/tracker)直接暴露在 getOwnPropertySymbols 反射面。
+ * 采集策略:装配期(先于页面脚本)全量按身份采集 own symbol → 完整内部集合,无需描述串匹配。
+ * 过滤:getOwnPropertySymbols / Reflect.ownKeys / getOwnPropertyDescriptors 三条 API 按身份滤除,闭合泄漏面。
  */
 export default {
   name: 'symbol',

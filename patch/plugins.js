@@ -1,14 +1,7 @@
 /**
- * patch/plugins —— 填充 navigator.plugins / navigator.mimeTypes(经典 headless tell:length=0)。
- *
- * 现状[实测]:jsdom 在 Navigator.prototype 以 accessor 暴露 plugins/mimeTypes,但实例为空
- * ([object PluginArray] length=0);真实 Chrome 自统一 PDF viewer 后固定 5 个 plugin × 2 个 mimeType。
- * 这一组是 Chromium 固定集(非设备身份,所有 Chrome 一致),故就地硬编码,类比 sdenv 的 matchMedia 列表。
- * 门控:仅 host=chrome;WebView 真机 plugins 确为空(pdfViewerEnabled=false),跳过即对。
- *
- * 注:navigator.plugins 不在 harness probe 目标内(盲区,value-level),形态靠运行时自测,无真机基线对照。
- * jsdom 的 PluginArray.prototype.length 读内部 slot,空壳 Object.create 取不到 → 改用 mask.iface 自建四类
- * (真机 PluginArray/Plugin/MimeType/MimeTypeArray 确为 illegal constructor),proto 装 native 方法、实例填索引。
+ * patch/plugins —— 填充 navigator.plugins / mimeTypes(经典 headless tell:length=0)。
+ * Chromium 固定集(5 plugin × 2 mimeType);门控 host=chrome(WebView 真机为空)。
+ * 经 mask.iface 自建四类(jsdom slot 取不到 length → 不能用原生 PluginArray)。
  */
 import { chromeHost } from './gates.js';
 
@@ -27,8 +20,7 @@ export default {
   applies: chromeHost,
   apply({ window, mask }) {
     const defineMethods = mask.methods;
-    // 类数组容器:索引 own 属性(enumerable)+ named(non-enumerable)。length 不落实例,见下:真机 length 在
-    // prototype 为 accessor、实例 ownKeys 无 length;装实例 data 会多出真机没有的 own 键(结构 tell)。
+    // 类数组:索引 own(enumerable) + named(non-enumerable)。length 在 prototype accessor(实例无 own)。
     const fillCollection = (arr, items, keyOf) => {
       items.forEach((it, i) => Object.defineProperty(arr, i, { value: it, enumerable: true, configurable: true }));
       for (const it of items) {

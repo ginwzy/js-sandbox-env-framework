@@ -1,15 +1,9 @@
 /**
- * patch/timezone —— 时区回放:让 Intl/Date 报告 profile.timezone 的 IANA 区,而非宿主机时区。
+ * patch/timezone —— 时区回放:让 Intl/Date 报告 profile 的 IANA 区,而非宿主机时区。
  *
- * 根因:jsdom/Node 的 Date 与 Intl 默认走宿主 ICU 时区(开发机 Asia/Shanghai),直接泄漏真实地理位置。
- * Akamai 等强检测把三处交叉比对,任一不一致即破:
- *   new Date().getTimezoneOffset() · Intl.DateTimeFormat().resolvedOptions().timeZone · Date.toString() 的 GMT 偏移。
- * profile.timezone{timeZone,offset} 真机采集已有(collect.js timezone 段),此前无 patch 消费。
- *
- * 一致性是关键(检测器靠"内部自相矛盾"识别伪装):getTimezoneOffset / toString 家族 / toLocale* /
- * Intl.DateTimeFormat 全部口径统一到同一目标区,且 DST 正确 —— 按各 Date 实例的真实时刻在目标区现算偏移,
- * 不套 profile 里那个固定的 capture-time offset(那是采集瞬时值,跨 DST 会与当下矛盾)。计算借宿主 Intl 的
- * timeZone 选项完成(与宿主默认区解耦),故无需改 ICU 全局态、无需 per-realm 设 TZ。
+ * 根因:jsdom/Node 走宿主 ICU 时区,直接泄漏地理位置。检测器交叉比对 getTimezoneOffset / resolvedOptions /
+ * toString GMT 偏移,任一不一致即破。全部口径统一到目标区,按实例时刻现算偏移(非采集瞬时值,DST 正确)。
+ * 借宿主 Intl timeZone 选项计算(无需改 ICU 全局态)。
  */
 export default {
   name: 'timezone',

@@ -1,17 +1,9 @@
 /**
- * patch/performance —— 补 performance 时序面(jsdom 仅有 now/timeOrigin/toJSON,缺整片 Performance Timeline)。
+ * patch/performance —— 补 performance 时序面(jsdom 仅有 now/timeOrigin/toJSON)。
  *
- * 为什么:Akamai BMS 的资源指纹(iG904 取 getEntriesByType('resource') 前 15 条做哈希)拿不到数据 —— 真实页面
- * 必有 15+ 资源,空集是 headless tell;navigation timing(performance.timing / PerformanceNavigationTiming)与
- * PerformanceObserver 同缺,Akamai 亦读。对照 node_akamai init/bms.js 手 stub getEntriesByType。
- *
- * 现状[实测]装配后:performance.{getEntries,getEntriesByType,getEntriesByName,timing,navigation}、
- * PerformanceObserver、PerformanceEntry/ResourceTiming 全 undefined;now/timeOrigin 存在。
- *
- * 本补丁为 stub(结构保真级,非身份值):条目结构/原型/instanceof/时间戳自洽对齐真机,条目集合为同源合成
- * (真机 resource 名集属采集面,未采 → 合成 N 条 plausible 同源资源,胜过空集这一确定 tell)。
- * 已知未尽项:① 条目数据走实例 own 键(真机为 PerformanceEntry.prototype 上 getter + 实例空 own 键);
- * ② 条目集合非真机采集值。两者待条目进 probe 集 / 采集面补全后精化。
+ * 根因:Akamai 取 getEntriesByType('resource') 前 15 条做哈希,空集是 headless tell;timing/navigation 同缺。
+ * 本补丁为 stub:条目结构/原型/instanceof/时间戳自洽,条目集合为同源合成(胜过空集)。
+ * 已知未尽项:条目数据走实例 own(真机为原型 getter);集合非真机采集值。
  */
 
 // 同源资源条目时间戳锚定小值(≤ ~9ms):performance.now() 自 realm 建起即 >10ms,保证 responseEnd ≤ now
@@ -26,7 +18,7 @@ function buildEntries(window, mask) {
   const NavProto = window.PerformanceNavigationTiming.prototype;
   const PaintProto = window.PerformancePaintTiming.prototype;
 
-  // 实例:数据作 own 键(stub;真机为原型 getter + 空实例 —— 已知未尽,见头注)。adopt 对齐 window 身份。
+  // 实例:数据作 own 键(stub,见头注)。
   const make = (proto, fields) => Object.assign(Object.create(proto), fields);
 
   const kinds = ['script', 'link', 'img', 'css', 'fetch'];
