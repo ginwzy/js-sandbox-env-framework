@@ -69,7 +69,6 @@ export default {
     const makeCtor = (name, len, opts = {}) => mask.ctorIface(name, len, opts.init, { parent: ET, ...opts });
 
     // illegal-constructor 单例(indexedDB / visualViewport)。
-    const makeSingleton = mask.singleton;
 
     // Worker:postMessage/terminate 壳;length=1(真机仅首参必选)。
     if (typeof W.Worker !== 'function') {
@@ -113,7 +112,7 @@ export default {
 
     // indexedDB:window.indexedDB 是 IDBFactory 单例(typeof object,非构造器)。
     if (W.indexedDB == null) {
-      const idb = makeSingleton('IDBFactory', {
+      const idb = mask.singleton('IDBFactory', {
         methods: {
           open: [1, () => mask.adopt({})], deleteDatabase: [1, () => mask.adopt({})],
           databases: [0, () => W.Promise.resolve(mask.adopt([]))], cmp: [2, (a, b) => (a < b ? -1 : a > b ? 1 : 0)],
@@ -127,7 +126,7 @@ export default {
     // visualViewport:VisualViewport 单例,继承 EventTarget。尺寸自 profile.window 派生。
     if (W.visualViewport == null) {
       const win = profile.section('window');
-      const vv = makeSingleton('VisualViewport', {
+      const vv = mask.singleton('VisualViewport', {
         parent: ET,
         accessors: {
           offsetLeft: () => 0, offsetTop: () => 0, pageLeft: () => 0, pageTop: () => 0,

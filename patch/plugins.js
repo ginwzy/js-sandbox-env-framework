@@ -19,7 +19,6 @@ export default {
   after: ['navigator'],
   applies: chromeHost,
   apply({ window, mask }) {
-    const defineMethods = mask.methods;
     // 类数组:索引 own(enumerable) + named(non-enumerable)。length 在 prototype accessor(实例无 own)。
     const fillCollection = (arr, items, keyOf) => {
       items.forEach((it, i) => Object.defineProperty(arr, i, { value: it, enumerable: true, configurable: true }));
@@ -43,9 +42,9 @@ export default {
       item: [1, function item(i) { return this[i] ?? null; }],
       namedItem: [1, function namedItem(name) { return this[name] ?? null; }],
     };
-    defineMethods(PluginArray.proto, { ...collMethods, refresh: [0, () => undefined] });
-    defineMethods(MimeTypeArray.proto, collMethods);
-    defineMethods(Plugin.proto, collMethods); // Plugin 本身是 mimeType 的类数组容器
+    mask.methods(PluginArray.proto, { ...collMethods, refresh: [0, () => undefined] });
+    mask.methods(MimeTypeArray.proto, collMethods);
+    mask.methods(Plugin.proto, collMethods); // Plugin 本身是 mimeType 的类数组容器
 
     // mimeType 实例(enabledPlugin 稍后回填指向 plugins[0])。
     const mimeInstances = MIME_TYPES.map((m) => MimeType.create({ ...m, enabledPlugin: null }));
