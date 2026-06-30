@@ -24,5 +24,6 @@ import protochain from './protochain.js';
 import eventtarget from './eventtarget.js';
 import domproto from './domproto.js';
 import keyorder from './keyorder.js';
+import trace from './trace.js';
 
-export const patches = [windowPatch, globals, stack, symbol, navigator, uadata, plugins, screen, viewport, timezone, chrome, touch, canvas, webgl, audio, clock, performance, protochain, eventtarget, domproto, keyorder];
+export const patches = [windowPatch, globals, stack, symbol, navigator, uadata, plugins, screen, viewport, timezone, chrome, touch, canvas, webgl, audio, clock, performance, protochain, eventtarget, domproto, keyorder, trace];
