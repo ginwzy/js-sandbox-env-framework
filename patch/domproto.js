@@ -234,7 +234,7 @@ export default {
     // prototype non-configurable → parseHTMLUnsafe 出现在 prototype 之后(键序 warn TELL,同 Node/Event 键序轴)。
     if (!W.Document.parseHTMLUnsafe) {
       Object.defineProperty(W.Document, 'parseHTMLUnsafe', {
-        value: mask.fn((html) => {
+        value: mask.native((html) => {
           const doc = W.document.implementation.createHTMLDocument('');
           if (html != null) doc.documentElement.innerHTML = String(html);
           return doc;
