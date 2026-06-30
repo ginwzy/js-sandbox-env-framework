@@ -33,7 +33,7 @@ export default {
     };
 
     // .prototype 残留清除:名集据 L2 基线 fn.hasPrototype===false(详见 docs/spec/prototype-residue-elimination.md)。
-    // 用基线(非启发式)→ 漏列只剩 tell,不破 new。print 刻意排除(desktop/webview 基线分歧)。
+    // 用基线(非启发式)→ 漏列只剩 tell,不破 new。
     const NO_PROTOTYPE = {
       window: new Set([
         'alert', 'atob', 'blur', 'btoa', 'cancelAnimationFrame', 'cancelIdleCallback', 'captureEvents',
@@ -42,7 +42,7 @@ export default {
         'prompt', 'queueMicrotask', 'releaseEvents', 'reportError', 'requestAnimationFrame', 'requestIdleCallback',
         'resizeBy', 'resizeTo', 'scroll', 'scrollBy', 'scrollTo', 'setInterval', 'setTimeout', 'stop',
         'structuredClone', 'webkitCancelAnimationFrame', 'webkitRequestAnimationFrame',
-        'webkitRequestFileSystem', 'webkitResolveLocalFileSystemURL',
+        'print', 'webkitRequestFileSystem', 'webkitResolveLocalFileSystemURL',
       ]),
       'Document.prototype': new Set(['evaluate', 'createExpression', 'createNSResolver']),
     };

@@ -50,10 +50,10 @@ ctor('window.RTCPeerConnection', 'RTCPeerConnection', 0);
 ctor('window.Notification', 'Notification', 1);
 
 // —— 惰性不变量:新 target-id 对既有(未含它们的)基线不产生 EXTRA/TELL ——
-// diff 只迭代 baseline.targets,新 id 不在其中 → 既有 gate 数完全不变(对照加 target 前 EXTRA=0/TELL=5)。
+// diff 只迭代 baseline.targets,新 id 不在其中 → 既有 gate 数完全不变(对照加 target 前 EXTRA=0/TELL=3)。
 const { summary } = await runDiff({ profile: 'chrome-mac', baseline: 'macos-chrome-v148' });
 ok('新 target 对旧基线惰性:chrome-mac×macos EXTRA===0', (summary.counts.EXTRA || 0) === 0);
-ok('新 target 对旧基线惰性:结构 TELL 仍 ≤ 5(无新增)', (summary.counts.TELL || 0) <= 5);
+ok('新 target 对旧基线惰性:结构 TELL 仍 ≤ 3(无新增)', (summary.counts.TELL || 0) <= 3);
 
 console.log(`\ncollection 采集 + 盲区 target:${pass} 通过 / ${failed} 失败`);
 process.exit(failed ? 1 : 0);
