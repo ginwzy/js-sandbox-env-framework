@@ -87,12 +87,12 @@ async function cmdDiff([profile], flags) {
     });
     if (flags.json) console.log(JSON.stringify({ summary: report.summary, entries: report.entries }, null, 2));
     else console.log(formatReport(report, { verbose: !!flags.verbose }));
-    process.exit(report.summary.gatePass ? 0 : 1);
+    process.exitCode = report.summary.gatePass ? 0 : 1;
   } catch (e) {
     console.error(`diff 失败: ${e.message}`);
     const names = listBaselines();
     if (names.length) console.error(`可用基线: ${names.join(', ')}`);
-    process.exit(2);
+    process.exitCode = 2;
   }
 }
 
@@ -106,7 +106,7 @@ async function cmdBaseline(_rest, flags) {
 
 function fail(msg) {
   console.error(msg);
-  process.exit(1);
+  process.exitCode = 1;
 }
 
 const [, , cmd, ...argv] = process.argv;
