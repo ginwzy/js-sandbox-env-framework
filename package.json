@@ -4,9 +4,23 @@
   "description": "基于 jsdom 的浏览器环境伪装框架 —— Profile/traits 驱动,面向 JS 逆向反检测",
   "type": "module",
   "main": "entry/index.js",
+  "exports": {
+    ".": "./entry/index.js"
+  },
   "bin": {
     "mimic": "entry/cli.js"
   },
+  "files": [
+    "entry/",
+    "core/",
+    "mask/",
+    "patch/",
+    "base/",
+    "trace/",
+    "capture/",
+    "profiles/",
+    "README.md"
+  ],
   "scripts": {
     "mimic": "node entry/cli.js",
     "smoke": "node smoke.js",
