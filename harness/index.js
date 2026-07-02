@@ -14,11 +14,37 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const BASELINES_DIR = path.join(HERE, 'baselines');
 const PROFILES_DIR = path.resolve(HERE, '../profiles');
 
-/** 解析 baseline:绝对/相对路径直用;裸名到 baselines/<name>.json;省略则取 baselines/ 下第一个(内置 seed 默认已移除,需先经真机采集)。 */
-function resolveBaseline(ref) {
+// profile→baseline 规范配对里"名不同"的人工对(同名/前缀对由 pairedBaseline 自动解出)。
+// 与 diff-gate.test.js 的 PAIRS 同源规约;那里为回归防护刻意各自钉死,故此处独立列而非共享。
+const PROFILE_BASELINE = {
+  'chrome-mac': 'macos-chrome-v148', // demo profile 无同名基线,host/formFactor 同 v148
+};
+
+/** profile 的配对基线名:显式映射 → 同名 → 唯一 `profile-*` 前缀。无解返回 null,多解抛(逼显式 --baseline)。 */
+function pairedBaseline(profile) {
+  if (PROFILE_BASELINE[profile]) return PROFILE_BASELINE[profile];
+  const all = listBaselines();
+  if (all.includes(profile)) return profile;                    // 同名对(采集服务一次落盘)
+  const pref = all.filter((b) => b.startsWith(`${profile}-`));  // 版本后缀对(linux-chrome→linux-chrome-v143)
+  if (pref.length === 1) return pref[0];
+  if (pref.length > 1) throw new Error(`profile "${profile}" 有多个候选基线 [${pref.join(', ')}],请 --baseline 指定`);
+  return null;
+}
+
+/**
+ * 解析 baseline:绝对/相对路径直用;裸名到 baselines/<name>.json。
+ * 省略 baseline 但给了 profile → 据 profile 反查配对基线(不回落字母序第一,否则桌面 profile 套 mobile 基线产 host 错配的假 EXTRA/MISSING)。
+ * 两者皆省 → 取 baselines/ 下第一个(内置 seed 已移除,需先经真机采集)。
+ */
+function resolveBaseline(ref, profile) {
   if (ref) {
     if (ref.endsWith('.json') || ref.includes('/')) return path.resolve(ref);
     return path.join(BASELINES_DIR, `${ref}.json`);
+  }
+  if (profile) {
+    const paired = pairedBaseline(profile);
+    if (paired) return path.join(BASELINES_DIR, `${paired}.json`);
+    throw new Error(`profile "${profile}" 无配对基线;用 --baseline <name> 指定(可用:${listBaselines().join(', ')})`);
   }
   const found = listBaselines();
   if (!found.length) throw new Error('无可用基线:先用 `mimic baseline` 采一份真机基线到 harness/baselines/');
@@ -41,7 +67,7 @@ export function listBaselines() {
  * @returns {Promise<{profile,baseline,entries,summary}>}
  */
 export async function runDiff({ profile, baseline, t1Only = false } = {}) {
-  const file = resolveBaseline(baseline);
+  const file = resolveBaseline(baseline, profile);
   const base = JSON.parse(readFileSync(file, 'utf8'));
   // 配对默认:统一采集服务同名落 profiles/<name>.json 与 baselines/<name>.json,故 profile 省略时优先取
   // 与基线同名的 profile(同源、零人工配对)。仅当该同名 profile 不存在(旧的无配对基线,如真机采集的

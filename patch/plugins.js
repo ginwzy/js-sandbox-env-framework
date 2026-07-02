@@ -82,7 +82,7 @@ function realmAlign(window) {
       const parent = Object.getPrototypeOf(cur);
       if (!parent || parent === WOP) break;
       if (Object.getPrototypeOf(parent) === null) {
-        Object.setPrototypeOf(cur, WOP);
+        try { Object.setPrototypeOf(cur, WOP); } catch { /* 原型不可扩展则跳过,不破坏 apply */ }
         break;
       }
       cur = parent;

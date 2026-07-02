@@ -235,9 +235,9 @@ export default {
     if (!W.Document.parseHTMLUnsafe) {
       Object.defineProperty(W.Document, 'parseHTMLUnsafe', {
         value: mask.native((html) => {
-          const doc = W.document.implementation.createHTMLDocument('');
-          if (html != null) doc.documentElement.innerHTML = String(html);
-          return doc;
+          // 真机解析整篇文档(html/head/body 结构完整)→ 用 DOMParser。documentElement.innerHTML 会
+          // 替换掉 head/body(.body 变 null),深度功能探针可据结构识破。
+          return new W.DOMParser().parseFromString(html == null ? '' : String(html), 'text/html');
         }, 'parseHTMLUnsafe', 1),
         writable: true, configurable: true, enumerable: false,
       });
