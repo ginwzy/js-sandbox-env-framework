@@ -11,3 +11,5 @@ export { Session } from '../core/session.js';
 export { Profile } from '../core/profile.js';
 export { createMask } from '../mask/index.js';
 export { patches } from '../patch/index.js';
+export { RealmPool } from './pool.js';
+export { serializeResult } from '../core/serialize.js';
