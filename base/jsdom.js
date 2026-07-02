@@ -16,6 +16,34 @@ const _genIdl = join(dirname(_require.resolve('jsdom')), 'generated', 'idl');
 const _DOMTokenList = _require(join(_genIdl, 'DOMTokenList.js'));
 const _idlUtils = _require(join(_genIdl, 'utils.js'));
 
+// Node/Event.prototype own 键序 ≠ Blink:jsdom 按 class-body 序(方法+访问器在前、WebIDL 常量 append 末尾),
+// 真机序是 访问器→常量→方法→constructor。patch 层的后置重排够不着 —— jsdom 把常量定义为 non-configurable,
+// delete 不动、插不到其前。故在构造期(install 内)把**原型**上的常量(全大写 IDL 常量)放宽为 configurable,
+// 使 patch/keyorder 得以 delete-重建重排;keyorder 重排后 relock 回 non-configurable(与真机描述符一致)。
+// 仅放宽原型(typeof target==='object'),不碰构造器静态常量(target 为函数,真机亦 non-configurable)。
+// install 经 interfaces.js 动态 `.install()` 调用,故改缓存模块的该属性即生效;拦截仅在自身 install 期间生效。
+const _IDL_CONST = /^[A-Z][A-Z_]+$/;
+for (const iface of ['Node', 'Event']) {
+  const mod = _require(join(_genIdl, `${iface}.js`));
+  const origInstall = mod.install;
+  mod.install = function (...args) {
+    const origDP = Object.defineProperties;
+    Object.defineProperties = function (target, props) {
+      if (typeof target === 'object' && target !== null) {
+        let patched = null;
+        for (const k of Object.keys(props)) {
+          if (_IDL_CONST.test(k) && 'value' in props[k] && !props[k].configurable) {
+            (patched ??= { ...props })[k] = { ...props[k], configurable: true };
+          }
+        }
+        if (patched) props = patched;
+      }
+      return origDP.call(this, target, props);
+    };
+    try { return origInstall.apply(this, args); } finally { Object.defineProperties = origDP; }
+  };
+}
+
 /**
  * 为元素的某 content attribute 铸一个**真实** jsdom DOMTokenList wrapper(复用 classList 的同一 createImpl 工厂)。
  * 真实 DTL 自带:空 own 属性、方法在 DOMTokenList.prototype、绑该 attribute 双向 live、per-instance 身份 ——

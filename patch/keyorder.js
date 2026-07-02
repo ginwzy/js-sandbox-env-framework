@@ -10,11 +10,10 @@
  * chrome 序取自 linux-chrome-v143、webview 序取自 android-webview-v138;两序键集与对应 host 注入集一致
  * (集合正确性见 diff 的 sameSet),本 pass 只改顺序。
  *
- * 覆盖面与机制边界:本 pass 是**后置重排**,delete 后重建的键必然 append 到残留键之后,故仅适用于"全
- * configurable"的原型(Navigator/HTMLDivElement/Document/Element/HTMLElement/EventTarget.prototype ✓,均实测
- * 零 non-configurable own 键)。Node/Event.prototype 做不到:真机序里 configurable accessors 排在
- * non-configurable WebIDL 常量(ELEMENT_NODE… / CAPTURING_PHASE…)**之前**,但 jsdom 把常量冻结在末尾删不动,
- * 后置重排插不到其前 —— 须在 jsdom 原型构造期拦截(更深的技术,本 pass 不覆盖)。
+ * 覆盖面:本 pass 是**后置重排**,delete-重建的键必 append 到残留键之后,故要求原型"全 configurable"。
+ * Navigator/HTMLDivElement/Document/Element/HTMLElement/EventTarget.prototype 天然全 configurable。
+ * Node/Event.prototype 的 WebIDL 常量(ELEMENT_NODE… / CAPTURING_PHASE…)真机 non-configurable、jsdom 冻在末尾
+ * 够不着 —— 已由 base/jsdom 在构造期放宽为 configurable 破局,本 pass 重排后再 relock 回 non-configurable。
  * host 轴:三表(Element/Document/HTMLElement.prototype)与 Navigator 均 per-host
  * (各 host 键集/键序差异及 per-host 取表根因见 ./keyorder-data)。大表逐字提取于该文件。
  */
@@ -62,6 +61,11 @@ const EVENT_TARGET_ORDER = ['addEventListener', 'dispatchEvent', 'removeEventLis
 // (webview/linux 实测同序);全 configurable(jsdom + 补的 accessor/handler),后置重排可行。真机 constructor
 // 不在末位 —— onchange/isExtended 排其后,故须显式 order(非 finalizeIfaces 的 constructor 末位规则)。
 const SCREEN_ORDER = ['availWidth', 'availHeight', 'width', 'height', 'colorDepth', 'pixelDepth', 'availLeft', 'availTop', 'orientation', 'constructor', 'onchange', 'isExtended'];
+// Node/Event.prototype:真机序 访问器 → WebIDL 常量 → 方法 → constructor,host 无关(两基线实测同序,同 Chromium)。
+// 常量经 base/jsdom 构造期放宽 configurable 后方可重排;重排后 relock 全大写常量键回 non-configurable。
+const NODE_ORDER = ['nodeType', 'nodeName', 'baseURI', 'isConnected', 'ownerDocument', 'parentNode', 'parentElement', 'childNodes', 'firstChild', 'lastChild', 'previousSibling', 'nextSibling', 'nodeValue', 'textContent', 'ELEMENT_NODE', 'ATTRIBUTE_NODE', 'TEXT_NODE', 'CDATA_SECTION_NODE', 'ENTITY_REFERENCE_NODE', 'ENTITY_NODE', 'PROCESSING_INSTRUCTION_NODE', 'COMMENT_NODE', 'DOCUMENT_NODE', 'DOCUMENT_TYPE_NODE', 'DOCUMENT_FRAGMENT_NODE', 'NOTATION_NODE', 'DOCUMENT_POSITION_DISCONNECTED', 'DOCUMENT_POSITION_PRECEDING', 'DOCUMENT_POSITION_FOLLOWING', 'DOCUMENT_POSITION_CONTAINS', 'DOCUMENT_POSITION_CONTAINED_BY', 'DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC', 'appendChild', 'cloneNode', 'compareDocumentPosition', 'contains', 'getRootNode', 'hasChildNodes', 'insertBefore', 'isDefaultNamespace', 'isEqualNode', 'isSameNode', 'lookupNamespaceURI', 'lookupPrefix', 'normalize', 'removeChild', 'replaceChild', 'constructor'];
+const EVENT_ORDER = ['type', 'target', 'currentTarget', 'eventPhase', 'bubbles', 'cancelable', 'defaultPrevented', 'composed', 'timeStamp', 'srcElement', 'returnValue', 'cancelBubble', 'NONE', 'CAPTURING_PHASE', 'AT_TARGET', 'BUBBLING_PHASE', 'composedPath', 'initEvent', 'preventDefault', 'stopImmediatePropagation', 'stopPropagation', 'constructor'];
+const IDL_CONST = /^[A-Z][A-Z_]+$/;
 
 export default {
   name: 'keyorder',
@@ -75,6 +79,11 @@ export default {
     mask.reorderOwnKeys(window.HTMLDivElement.prototype, HTML_DIV_ELEMENT_ORDER);
     mask.reorderOwnKeys(window.EventTarget.prototype, EVENT_TARGET_ORDER);
     mask.reorderOwnKeys(window.Screen.prototype, SCREEN_ORDER);
+    // Node/Event.prototype:常量已由 base/jsdom 构造期放宽 configurable → 后置重排可达;排后 relock 常量回 non-configurable。
+    for (const [proto, order] of [[window.Node.prototype, NODE_ORDER], [window.Event.prototype, EVENT_ORDER]]) {
+      mask.reorderOwnKeys(proto, order);
+      for (const k of order) if (IDL_CONST.test(k)) Object.defineProperty(proto, k, { configurable: false });
+    }
     // domproto 补全 Document/Element/HTMLElement.prototype 键集 → 激活 order 检测,据真机序重排(per-host)。
     // 仅在对应真机基线键集与 mimic 注入集相等时该原型 order 才被检视(更高版本因键集漂移而休眠,见 keyorder-data)。
     const elOrder = ELEMENT_ORDER[traits.host];

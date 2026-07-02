@@ -13,9 +13,9 @@
  * 基线,其真机基线是 macos-chrome-v148(同 host=chrome / formFactor=desktop;版本 131 vs 148 仅差值
  * 不差结构面,故 EXTRA 仍为 0)。
  *
- * EXTRA===0 是当前维护中的硬不变量。结构 TELL(Document.constructor
- * 的 parseHTML* / Node·Event.prototype own 键序)属已知未尽项,以数量上限守护:新增结构 tell 即破门,
- * 已知项逐步修复后下调上限(修复落地时一并收紧)。
+ * EXTRA===0 是硬不变量。结构 TELL 以数量上限守护(新增即破门):Node/Event.prototype own 键序已解
+ * (base/jsdom 构造期放宽常量 configurable + patch/keyorder 重排 → webview/linux 归 0);macos v148/v149 余
+ * 1 = Document.constructor 缺 parseHTML(新版 Sanitizer API,另行跟踪)。上限随修复逐步收紧。
  *
  * 覆盖口径(勿过度解读 EXTRA===0):EXTRA 只在 probe TARGETS 列出的 target 的 own 键集内逐项算,故"无过度注入"
  * 仅对被探 target 成立。window 本体不是被探 object target(window.* 仅 Worker/RTCPeerConnection/Notification
@@ -34,13 +34,13 @@ function ok(name, cond) {
 // [伪装 profile, 其真机基线, 已知结构 TELL 数上限]。同名对为采集服务一次落盘的 profile+baseline;
 // chrome-mac→macos-chrome-v148、linux-chrome→linux-chrome-v143 是 demo/真采分离的人工配对。
 const PAIRS = [
-  ['chrome-mac', 'macos-chrome-v148', 3],
-  ['macos-chrome-v148', 'macos-chrome-v148', 3],
+  ['chrome-mac', 'macos-chrome-v148', 1],
+  ['macos-chrome-v148', 'macos-chrome-v148', 1],
   // v149 是含新探针 target(plugins/mimeTypes collection + Worker/RTC/Notification/indexedDB/
   // visualViewport/userAgentData)的首份真机基线 —— 守这些盲区面的 EXTRA===0(实例 own 键不越真机)。
-  ['macos-chrome-v149', 'macos-chrome-v149', 3],
-  ['android-webview-v138', 'android-webview-v138', 3],
-  ['linux-chrome', 'linux-chrome-v143', 3],
+  ['macos-chrome-v149', 'macos-chrome-v149', 1],
+  ['android-webview-v138', 'android-webview-v138', 0],
+  ['linux-chrome', 'linux-chrome-v143', 0],
 ];
 
 console.log('[per-profile 结构 gate — 伪装 profile × 真机基线]');
